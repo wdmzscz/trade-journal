@@ -2,7 +2,7 @@ import Papa from 'papaparse'
 import { v4 as uuidv4 } from 'uuid'
 import type { Trade } from '../types'
 import { calculateTradePnl } from './stats'
-import { isIbkrStatement, parseIbkrStatement } from './ibkrImport'
+import { isIbkrStatement, parseIbkrStatement, type IbkrAccountFinancials } from './ibkrImport'
 
 export type CsvFormat = 'generic' | 'ibkr'
 
@@ -11,6 +11,7 @@ export interface CsvParseResult {
   errors: string[]
   format: CsvFormat
   account?: string
+  accountFinancials?: IbkrAccountFinancials
 }
 
 export interface CsvRow {
@@ -118,6 +119,7 @@ export function parseCsvText(text: string): CsvParseResult {
       errors: result.errors,
       format: 'ibkr',
       account: result.account,
+      accountFinancials: result.financials ?? undefined,
     }
   }
 

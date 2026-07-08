@@ -14,6 +14,7 @@ import { AccountScopeBanner } from '../components/AccountScopeBanner'
 import {
   computeDailyPnl,
   computeCumulativePnl,
+  computeDailyEquity,
   computeCalendarStats,
   buildMonthWeeks,
   buildMiniMonthDays,
@@ -29,13 +30,34 @@ const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const MONTHS = Array.from({ length: 12 }, (_, i) => i)
 
 export function CalendarPage() {
-  const { filteredTrades, filteredJournal } = useTradeStore()
+  const { filteredTrades, filteredJournal, accountProfiles, selectedAccount } = useTradeStore()
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
   const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const pnlMap = useMemo(() => new Map(dailyPnl.map((d) => [d.date, d])), [dailyPnl])
+
+  const capitalContext = useMemo(() => {
+    if (selectedAccount === 'all') {
+      return {
+        startingCapital: accountProfiles.reduce((s, p) => s + (p.startingCapital ?? 0), 0),
+        currentCapital: accountProfiles.reduce((s, p) => s + (p.currentCapital ?? 0), 0),
+        cashFlows: accountProfiles.flatMap((p) => p.cashFlows ?? []),
+      }
+    }
+    const profile = accountProfiles.find((p) => p.id === selectedAccount)
+    return {
+      startingCapital: profile?.startingCapital ?? 0,
+      currentCapital: profile?.currentCapital,
+      cashFlows: profile?.cashFlows ?? [],
+    }
+  }, [selectedAccount, accountProfiles])
+
+  const dailyEquityMap = useMemo(
+    () => computeDailyEquity(capitalContext.startingCapital, capitalContext.cashFlows, dailyPnl),
+    [capitalContext, dailyPnl]
+  )
   const journalDates = useMemo(() => new Set(filteredJournal.map((j) => j.date)), [filteredJournal])
 
   const monthDate = useMemo(() => new Date(selectedYear, selectedMonth, 1), [selectedYear, selectedMonth])
@@ -149,6 +171,105 @@ export function CalendarPage() {
         />
       </div>
 
+      {/* Monthly View */}
+      <div className="rounded-xl border border-surface-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (selectedMonth === 0) {
+                  setSelectedYear((y) => y - 1)
+                  setSelectedMonth(11)
+                } else {
+                  setSelectedMonth((m) => m - 1)
+                }
+                setSelectedDate(null)
+              }}
+              className="rounded p-1 hover:bg-slate-100"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <h2 className="text-lg font-semibold text-slate-900">
+              {format(monthDate, 'yyyy年 M月', { locale: zhCN })}
+            </h2>
+            <button
+              onClick={() => {
+                if (selectedMonth === 11) {
+                  setSelectedYear((y) => y + 1)
+                  setSelectedMonth(0)
+                } else {
+                  setSelectedMonth((m) => m + 1)
+                }
+                setSelectedDate(null)
+              }}
+              className="rounded p-1 hover:bg-slate-100"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="text-right">
+            {capitalContext.currentCapital != null && capitalContext.currentCapital > 0 && (
+              <p className="text-xs text-slate-500">
+                本金（净资产） <span className="font-semibold text-slate-700">{formatCurrency(capitalContext.currentCapital)}</span>
+              </p>
+            )}
+            <p className="text-xs text-slate-500">月度总盈亏</p>
+            <PnlBadge value={monthStats.totalPnl} className="text-lg font-bold" />
+          </div>
+        </div>
+
+        <div className="mb-2 grid grid-cols-8 gap-1 text-center text-xs font-medium text-slate-400">
+          {WEEKDAYS.map((d) => (
+            <div key={d}>{d}</div>
+          ))}
+          <div>周合计</div>
+        </div>
+
+        <div className="space-y-1">
+          {monthWeeks.map((week, wi) => (
+            <div key={wi} className="grid grid-cols-8 gap-1">
+              {week.days.map((dateStr, di) => {
+                if (!dateStr) {
+                  return <div key={`empty-${wi}-${di}`} className="min-h-[5rem]" />
+                }
+                const pnl = pnlMap.get(dateStr)
+                const result = getDayResult(pnl?.pnl)
+                const isSelected = selectedDate === dateStr
+                const hasJournal = journalDates.has(dateStr)
+                const pnlPercent = dailyEquityMap.get(dateStr)?.pnlPercent
+
+                return (
+                  <DayCell
+                    key={dateStr}
+                    dateStr={dateStr}
+                    dayNum={parseISO(dateStr).getDate()}
+                    pnl={pnl?.pnl}
+                    pnlPercent={pnlPercent}
+                    trades={pnl?.trades}
+                    result={result}
+                    isSelected={isSelected}
+                    hasJournal={hasJournal}
+                    onClick={() => setSelectedDate(dateStr)}
+                  />
+                )
+              })}
+              <div className="flex min-h-[5rem] flex-col items-center justify-center rounded-lg bg-slate-50 px-1 text-center">
+                {week.weekTrades > 0 ? (
+                  <>
+                    <span className={`text-xs font-semibold ${week.weekPnl >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {week.weekPnl >= 0 ? '+' : ''}{week.weekPnl.toFixed(0)}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{week.weekTrades} 笔</span>
+                  </>
+                ) : (
+                  <span className="text-[10px] text-slate-300">—</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Year Calendar */}
       <div className="rounded-xl border border-surface-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -217,98 +338,6 @@ export function CalendarPage() {
               </button>
             )
           })}
-        </div>
-      </div>
-
-      {/* Monthly View */}
-      <div className="rounded-xl border border-surface-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                if (selectedMonth === 0) {
-                  setSelectedYear((y) => y - 1)
-                  setSelectedMonth(11)
-                } else {
-                  setSelectedMonth((m) => m - 1)
-                }
-                setSelectedDate(null)
-              }}
-              className="rounded p-1 hover:bg-slate-100"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {format(monthDate, 'yyyy年 M月', { locale: zhCN })}
-            </h2>
-            <button
-              onClick={() => {
-                if (selectedMonth === 11) {
-                  setSelectedYear((y) => y + 1)
-                  setSelectedMonth(0)
-                } else {
-                  setSelectedMonth((m) => m + 1)
-                }
-                setSelectedDate(null)
-              }}
-              className="rounded p-1 hover:bg-slate-100"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-slate-500">月度总盈亏</p>
-            <PnlBadge value={monthStats.totalPnl} className="text-lg font-bold" />
-          </div>
-        </div>
-
-        <div className="mb-2 grid grid-cols-8 gap-1 text-center text-xs font-medium text-slate-400">
-          {WEEKDAYS.map((d) => (
-            <div key={d}>{d}</div>
-          ))}
-          <div>周合计</div>
-        </div>
-
-        <div className="space-y-1">
-          {monthWeeks.map((week, wi) => (
-            <div key={wi} className="grid grid-cols-8 gap-1">
-              {week.days.map((dateStr, di) => {
-                if (!dateStr) {
-                  return <div key={`empty-${wi}-${di}`} className="min-h-[4.5rem]" />
-                }
-                const pnl = pnlMap.get(dateStr)
-                const result = getDayResult(pnl?.pnl)
-                const isSelected = selectedDate === dateStr
-                const hasJournal = journalDates.has(dateStr)
-
-                return (
-                  <DayCell
-                    key={dateStr}
-                    dateStr={dateStr}
-                    dayNum={parseISO(dateStr).getDate()}
-                    pnl={pnl?.pnl}
-                    trades={pnl?.trades}
-                    result={result}
-                    isSelected={isSelected}
-                    hasJournal={hasJournal}
-                    onClick={() => setSelectedDate(dateStr)}
-                  />
-                )
-              })}
-              <div className="flex min-h-[4.5rem] flex-col items-center justify-center rounded-lg bg-slate-50 px-1 text-center">
-                {week.weekTrades > 0 ? (
-                  <>
-                    <span className={`text-xs font-semibold ${week.weekPnl >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {week.weekPnl >= 0 ? '+' : ''}{week.weekPnl.toFixed(0)}
-                    </span>
-                    <span className="text-[10px] text-slate-400">{week.weekTrades} 笔</span>
-                  </>
-                ) : (
-                  <span className="text-[10px] text-slate-300">—</span>
-                )}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -501,6 +530,7 @@ export function CalendarPage() {
 function DayCell({
   dayNum,
   pnl,
+  pnlPercent,
   trades,
   result,
   isSelected,
@@ -510,25 +540,45 @@ function DayCell({
   dateStr: string
   dayNum: number
   pnl?: number
+  pnlPercent?: number
   trades?: number
   result: DayResult
   isSelected: boolean
   hasJournal: boolean
   onClick: () => void
 }) {
+  const textMuted = isSelected ? 'text-white/80' : ''
+  const pnlPositive = pnl !== undefined && pnl >= 0
+  const pctPositive = pnlPercent !== undefined && pnlPercent >= 0
+
   return (
     <button
       onClick={onClick}
-      className={`relative flex min-h-[4.5rem] flex-col items-center rounded-lg p-1.5 text-xs transition-colors ${dayResultBgClass(result, isSelected)}`}
+      className={`relative flex min-h-[5rem] flex-col items-center rounded-lg p-1.5 text-xs transition-colors ${dayResultBgClass(result, isSelected)}`}
     >
       <span className="font-semibold">{dayNum}</span>
       {pnl !== undefined && (
-        <span className={`mt-0.5 text-[10px] font-medium ${isSelected ? 'text-white' : ''}`}>
-          {pnl >= 0 ? '+' : ''}{pnl.toFixed(0)}
-        </span>
+        <>
+          <span className={`mt-0.5 text-[10px] font-medium ${isSelected ? 'text-white' : ''}`}>
+            {pnl >= 0 ? '+' : ''}{pnl.toFixed(0)}
+          </span>
+          {pnlPercent !== undefined && (
+            <span
+              className={`text-[9px] font-medium ${
+                isSelected
+                  ? 'text-white/90'
+                  : pnlPositive
+                    ? 'text-emerald-600'
+                    : 'text-red-500'
+              }`}
+            >
+              ({pctPositive ? '+' : ''}{pnlPercent.toFixed(1)}%)
+            </span>
+          )}
+        </>
       )}
       {trades !== undefined && trades > 0 && (
-        <span className={`text-[9px] ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>
+        <span className={`text-[9px] ${textMuted || 'text-slate-400'}`}>
           {trades} 笔
         </span>
       )}

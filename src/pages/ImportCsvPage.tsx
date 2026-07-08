@@ -6,6 +6,8 @@ import type { Trade } from '../types'
 import type { CsvFormat } from '../utils/csvImport'
 import { PnlBadge } from '../components/PnlBadge'
 import { StorageInfo } from '../components/StorageInfo'
+import { formatCurrency } from '../utils/stats'
+import type { IbkrAccountFinancials } from '../utils/ibkrImport'
 
 export function ImportCsvPage() {
   const { importTrades, setSelectedAccount } = useTradeStore()
@@ -15,6 +17,7 @@ export function ImportCsvPage() {
   const [importResult, setImportResult] = useState<{ added: number; skipped: number; replaced: boolean } | null>(null)
   const [format, setFormat] = useState<CsvFormat | null>(null)
   const [detectedAccount, setDetectedAccount] = useState<string | null>(null)
+  const [detectedFinancials, setDetectedFinancials] = useState<IbkrAccountFinancials | null>(null)
   /** merge=追加去重（默认）；replace=替换该账户全部记录 */
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
 
@@ -28,6 +31,7 @@ export function ImportCsvPage() {
     setErrors(result.errors)
     setFormat(result.format)
     setDetectedAccount(result.account ?? null)
+    setDetectedFinancials(result.accountFinancials ?? null)
     setImportResult(null)
   }, [])
 
@@ -47,6 +51,7 @@ export function ImportCsvPage() {
     if (preview.length === 0) return
     const result = importTrades(preview, {
       replaceAccount: importMode === 'replace' && detectedAccount ? detectedAccount : undefined,
+      accountFinancials: detectedFinancials ?? undefined,
     })
     if (detectedAccount) {
       setSelectedAccount(detectedAccount)
@@ -55,6 +60,7 @@ export function ImportCsvPage() {
     setPreview([])
     setFormat(null)
     setDetectedAccount(null)
+    setDetectedFinancials(null)
   }
 
   const totalPnl = preview.filter((t) => t.status === 'closed').reduce((s, t) => s + t.pnl, 0)
@@ -157,6 +163,15 @@ export function ImportCsvPage() {
         <div className="rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm text-brand-900">
           <p className="font-semibold">已识别为 IBKR 活动账单</p>
           <p className="mt-1 break-words">账户：<strong>{detectedAccount}</strong> · {preview.length} 笔 · {symbols.join(', ')}</p>
+          {detectedFinancials && (
+            <p className="mt-2 text-brand-800">
+              本金：期初 {formatCurrency(detectedFinancials.startingCapital)} → 当前{' '}
+              <strong>{formatCurrency(detectedFinancials.currentCapital)}</strong>
+              {detectedFinancials.totalDeposits > 0 && (
+                <span> · 入金 {formatCurrency(detectedFinancials.totalDeposits)}</span>
+              )}
+            </p>
+          )}
         </div>
       )}
 

@@ -5,11 +5,24 @@ export type AssetClass = 'futures' | 'stock' | 'option' | 'forex' | 'other'
 
 export type AccountType = 'futures' | 'stock' | 'other'
 
+export interface AccountCashFlow {
+  date: string
+  amount: number
+  description?: string
+}
+
 export interface AccountProfile {
   id: string
   label: string
   type: AccountType
   createdAt: string
+  /** 期初净值（IBKR：开始价值） */
+  startingCapital?: number
+  /** 当前/期末净值（IBKR：结束价值） */
+  currentCapital?: number
+  totalDeposits?: number
+  totalWithdrawals?: number
+  cashFlows?: AccountCashFlow[]
 }
 
 export interface AccountInfo {
@@ -18,6 +31,8 @@ export interface AccountInfo {
   type: AccountType
   tradeCount: number
   totalPnl: number
+  startingCapital?: number
+  currentCapital?: number
 }
 
 export interface Trade {

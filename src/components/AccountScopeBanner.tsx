@@ -45,6 +45,12 @@ export function AccountScopeBanner({ className }: { className?: string }) {
         )}
         <span className="mx-2 text-slate-200">|</span>
         {filteredTrades.length} 笔交易
+        {selectedAccountInfo?.currentCapital != null && selectedAccountInfo.currentCapital > 0 && (
+          <>
+            <span className="mx-2 text-slate-200">|</span>
+            本金 <span className="font-semibold text-slate-900">{formatCurrency(selectedAccountInfo.currentCapital)}</span>
+          </>
+        )}
         <span className="mx-2 text-slate-200">|</span>
         盈亏 <span className={cn('font-semibold', totalPnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(totalPnl)}</span>
       </p>

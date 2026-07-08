@@ -1,5 +1,5 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import type { Trade, JournalEntry, AccountProfile } from '../types'
+import type { Trade, JournalEntry, AccountProfile, AccountCashFlow } from '../types'
 import { getSupabase } from './supabase'
 
 export type CloudData = {
@@ -53,6 +53,11 @@ interface ProfileRow {
   label: string
   type: string
   created_at: string
+  starting_capital: number | null
+  current_capital: number | null
+  total_deposits: number | null
+  total_withdrawals: number | null
+  cash_flows: AccountCashFlow[] | null
 }
 
 function rowToTrade(row: TradeRow): Trade {
@@ -145,6 +150,11 @@ function rowToProfile(row: ProfileRow): AccountProfile {
     label: row.label,
     type: row.type as AccountProfile['type'],
     createdAt: row.created_at,
+    startingCapital: row.starting_capital ?? undefined,
+    currentCapital: row.current_capital ?? undefined,
+    totalDeposits: row.total_deposits ?? undefined,
+    totalWithdrawals: row.total_withdrawals ?? undefined,
+    cashFlows: row.cash_flows ?? undefined,
   }
 }
 
@@ -155,6 +165,11 @@ function profileToRow(profile: AccountProfile, userId: string): ProfileRow {
     label: profile.label,
     type: profile.type,
     created_at: profile.createdAt,
+    starting_capital: profile.startingCapital ?? null,
+    current_capital: profile.currentCapital ?? null,
+    total_deposits: profile.totalDeposits ?? null,
+    total_withdrawals: profile.totalWithdrawals ?? null,
+    cash_flows: profile.cashFlows ?? null,
   }
 }
 

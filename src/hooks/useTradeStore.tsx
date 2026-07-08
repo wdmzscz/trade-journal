@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType } from '../types'
 import { calculateTradePnl } from '../utils/stats'
 import { mergeTrades } from '../utils/storage'
+import type { IbkrAccountFinancials } from '../utils/ibkrImport'
 import { isCloudEnabled } from '../lib/supabase'
 import {
   fetchAllData,
@@ -67,6 +68,17 @@ function inferAccountType(trades: Trade[]): AccountType {
   return 'other'
 }
 
+function applyFinancialsToProfile(profile: AccountProfile, financials: IbkrAccountFinancials): AccountProfile {
+  return {
+    ...profile,
+    startingCapital: financials.startingCapital,
+    currentCapital: financials.currentCapital,
+    totalDeposits: financials.totalDeposits,
+    totalWithdrawals: financials.totalWithdrawals,
+    cashFlows: financials.cashFlows,
+  }
+}
+
 export type SyncStatus = 'idle' | 'loading' | 'syncing' | 'error'
 
 interface TradeStoreContextValue {
@@ -80,12 +92,20 @@ interface TradeStoreContextValue {
   accountProfiles: AccountProfile[]
   accountInfos: AccountInfo[]
   registerAccount: (id: string, label: string, type: AccountType) => void
-  updateAccount: (id: string, updates: { label?: string; type?: AccountType }) => void
+  updateAccount: (id: string, updates: {
+    label?: string
+    type?: AccountType
+    startingCapital?: number
+    currentCapital?: number
+  }) => void
   deleteAccount: (id: string) => void
   addTrade: (trade: Omit<Trade, 'id' | 'createdAt' | 'updatedAt' | 'pnl'> & { pnl?: number }) => void
   updateTrade: (id: string, updates: Partial<Trade>) => void
   deleteTrade: (id: string) => void
-  importTrades: (trades: Trade[], options?: { replaceAccount?: string }) => { added: number; skipped: number; replaced: boolean }
+  importTrades: (trades: Trade[], options?: {
+    replaceAccount?: string
+    accountFinancials?: IbkrAccountFinancials
+  }) => { added: number; skipped: number; replaced: boolean }
   saveJournal: (entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void
   deleteJournal: (id: string) => void
   getJournalByDate: (date: string) => JournalEntry | undefined
@@ -248,7 +268,12 @@ export function TradeStoreProvider({
     setSelectedAccountState(trimmedId)
   }, [cloudEnabled, cloudWrite])
 
-  const updateAccount = useCallback((id: string, updates: { label?: string; type?: AccountType }) => {
+  const updateAccount = useCallback((id: string, updates: {
+    label?: string
+    type?: AccountType
+    startingCapital?: number
+    currentCapital?: number
+  }) => {
     setAccountProfiles((prev) => {
       const existing = prev.find((p) => p.id === id)
       let profile: AccountProfile
@@ -257,6 +282,8 @@ export function TradeStoreProvider({
           ...existing,
           label: updates.label !== undefined ? updates.label.trim() || id : existing.label,
           type: updates.type ?? existing.type,
+          startingCapital: updates.startingCapital ?? existing.startingCapital,
+          currentCapital: updates.currentCapital ?? existing.currentCapital,
         }
       } else {
         profile = {
@@ -264,6 +291,8 @@ export function TradeStoreProvider({
           label: updates.label?.trim() || id,
           type: updates.type ?? inferAccountType(trades.filter((t) => t.account === id)),
           createdAt: new Date().toISOString(),
+          startingCapital: updates.startingCapital,
+          currentCapital: updates.currentCapital,
         }
       }
 
@@ -322,6 +351,8 @@ export function TradeStoreProvider({
         type: profile?.type ?? inferAccountType(accountTrades),
         tradeCount: accountTrades.length,
         totalPnl: closed.reduce((sum, t) => sum + t.pnl, 0),
+        startingCapital: profile?.startingCapital,
+        currentCapital: profile?.currentCapital,
       }
     })
   }, [accounts, accountProfiles, trades])
@@ -371,26 +402,36 @@ export function TradeStoreProvider({
     }
   }, [cloudEnabled, cloudWrite])
 
-  const importTrades = useCallback((newTrades: Trade[], options?: { replaceAccount?: string }) => {
+  const importTrades = useCallback((newTrades: Trade[], options?: {
+    replaceAccount?: string
+    accountFinancials?: IbkrAccountFinancials
+  }) => {
     const accountId = options?.replaceAccount ?? newTrades[0]?.account
     const isReplace = Boolean(options?.replaceAccount)
 
     if (accountId) {
       const accountTrades = newTrades.filter((t) => t.account === accountId)
       setAccountProfiles((prev) => {
-        if (prev.some((p) => p.id === accountId)) return prev
+        const existing = prev.find((p) => p.id === accountId)
         const type = inferAccountType(accountTrades)
-        const profile: AccountProfile = {
+        let profile: AccountProfile = existing ?? {
           id: accountId,
           label: accountId,
           type,
           createdAt: new Date().toISOString(),
         }
 
+        if (options?.accountFinancials) {
+          profile = applyFinancialsToProfile(profile, options.accountFinancials)
+        }
+
         if (cloudEnabled && userIdRef.current) {
           cloudWrite(() => upsertProfile(userIdRef.current!, profile))
         }
 
+        if (existing) {
+          return prev.map((p) => (p.id === accountId ? profile : p))
+        }
         return [...prev, profile]
       })
     }

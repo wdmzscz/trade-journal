@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import Papa from 'papaparse'
-import type { Trade, TradeSide } from '../types'
+import type { Trade, TradeSide, AccountCashFlow } from '../types'
 
 interface IbkrOrder {
   symbol: string
@@ -17,6 +17,12 @@ interface IbkrOrder {
 const TRADE_SECTIONS = new Set(['交易', 'Trades'])
 const ACCOUNT_SECTIONS = new Set(['账户信息', 'Account Information'])
 const ACCOUNT_FIELD_KEYS = new Set(['账户', 'Account'])
+const NAV_CHANGE_SECTIONS = new Set(['净资产值变更', 'Change in NAV'])
+const NAV_VALUE_SECTIONS = new Set(['净资产值', 'Net Asset Value'])
+const DEPOSIT_SECTIONS = new Set(['存款和取款', 'Deposits & Withdrawals', 'Deposits and Withdrawals'])
+const STARTING_VALUE_KEYS = new Set(['开始价值', 'Starting Value'])
+const ENDING_VALUE_KEYS = new Set(['结束价值', 'Ending Value'])
+const TOTAL_ROW_KEYS = new Set(['总数', 'Total', '总计（全部资产）', 'Total (All Assets)'])
 
 function normalizeAssetClass(value: string): Trade['assetClass'] {
   const v = value.toLowerCase()
@@ -190,6 +196,7 @@ export function parseIbkrStatement(text: string): {
   account: string
   errors: string[]
   format: 'ibkr'
+  financials: IbkrAccountFinancials | null
 } {
   const parsed = Papa.parse<string[]>(text, {
     skipEmptyLines: true,
@@ -199,12 +206,13 @@ export function parseIbkrStatement(text: string): {
   const account = extractAccount(rows)
   const orders = extractOrders(rows)
   const { trades, errors } = pairOrdersToTrades(orders, account)
+  const financials = extractFinancials(rows)
 
   if (orders.length === 0) {
     errors.push('未在文件中找到 IBKR 交易记录（交易 / Trades 部分）')
   }
 
-  return { trades, account, errors, format: 'ibkr' }
+  return { trades, account, errors, format: 'ibkr', financials }
 }
 
 export function getIbkrSubtotals(text: string): Record<string, number> {
@@ -220,4 +228,86 @@ export function getIbkrSubtotals(text: string): Record<string, number> {
   }
 
   return subtotals
+}
+
+export interface IbkrAccountFinancials {
+  startingCapital: number
+  currentCapital: number
+  totalDeposits: number
+  totalWithdrawals: number
+  cashFlows: AccountCashFlow[]
+}
+
+function extractFinancials(rows: string[][]): IbkrAccountFinancials | null {
+  const navFields = new Map<string, number>()
+  let navTotal = 0
+  const cashFlows: AccountCashFlow[] = []
+
+  for (const row of rows) {
+    if (NAV_CHANGE_SECTIONS.has(row[0]) && row[1] === 'Data' && row[2]) {
+      navFields.set(row[2].trim(), parseNumber(row[3]))
+    }
+
+    if (NAV_VALUE_SECTIONS.has(row[0]) && row[1] === 'Data') {
+      const assetType = row[2]?.trim()
+      if (assetType === '总数' || assetType === 'Total') {
+        const total = parseNumber(row[6])
+        if (total > 0) navTotal = total
+      }
+    }
+
+    if (DEPOSIT_SECTIONS.has(row[0]) && row[1] === 'Data') {
+      const currencyOrTotal = row[2]?.trim()
+      if (!currencyOrTotal || TOTAL_ROW_KEYS.has(currencyOrTotal)) continue
+
+      const date = row[3]?.trim()
+      const amount = parseNumber(row[5])
+      if (date && /^\d{4}-\d{2}-\d{2}/.test(date) && amount !== 0) {
+        cashFlows.push({
+          date: date.slice(0, 10),
+          amount,
+          description: row[4]?.trim(),
+        })
+      }
+    }
+  }
+
+  if (navFields.size === 0 && navTotal === 0 && cashFlows.length === 0) {
+    return null
+  }
+
+  let startingCapital = 0
+  for (const key of STARTING_VALUE_KEYS) {
+    if (navFields.has(key)) {
+      startingCapital = navFields.get(key)!
+      break
+    }
+  }
+
+  let currentCapital = navTotal
+  for (const key of ENDING_VALUE_KEYS) {
+    if (navFields.has(key)) {
+      currentCapital = navFields.get(key)!
+      break
+    }
+  }
+
+  const totalDeposits = (() => {
+    const netFlow = navFields.get('存款和取款') ?? navFields.get('Deposits & Withdrawals')
+    if (netFlow != null && netFlow > 0) return netFlow
+    return cashFlows.filter((f) => f.amount > 0).reduce((s, f) => s + f.amount, 0)
+  })()
+  const totalWithdrawals = (() => {
+    const netFlow = navFields.get('存款和取款') ?? navFields.get('Deposits & Withdrawals')
+    if (netFlow != null && netFlow < 0) return Math.abs(netFlow)
+    return cashFlows.filter((f) => f.amount < 0).reduce((s, f) => s + Math.abs(f.amount), 0)
+  })()
+
+  return {
+    startingCapital,
+    currentCapital,
+    totalDeposits,
+    totalWithdrawals,
+    cashFlows,
+  }
 }

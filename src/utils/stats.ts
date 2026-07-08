@@ -13,6 +13,7 @@ import type {
   JournalEntry,
   DashboardStats,
   DailyPnl,
+  AccountCashFlow,
   SymbolStats,
   SetupStats,
   DayResult,
@@ -99,6 +100,45 @@ export function computeCumulativePnl(daily: DailyPnl[]): { date: string; cumulat
     cumulative += d.pnl
     return { date: d.date, cumulative, daily: d.pnl }
   })
+}
+
+/** 每日盈亏占当日开盘前本金的百分比（基于 IBKR 净值 + 存取款重建权益曲线） */
+export function computeDailyEquity(
+  startingCapital: number,
+  cashFlows: AccountCashFlow[],
+  dailyPnl: DailyPnl[]
+): Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }> {
+  const pnlByDate = new Map(dailyPnl.map((d) => [d.date, d.pnl]))
+  const flowsByDate = new Map<string, number>()
+  for (const cf of cashFlows) {
+    flowsByDate.set(cf.date, (flowsByDate.get(cf.date) ?? 0) + cf.amount)
+  }
+
+  const allDates = new Set<string>()
+  cashFlows.forEach((cf) => allDates.add(cf.date))
+  dailyPnl.forEach((d) => allDates.add(d.date))
+
+  const sortedDates = [...allDates].sort()
+  let equity = startingCapital
+  const result = new Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }>()
+
+  for (const date of sortedDates) {
+    const flow = flowsByDate.get(date) ?? 0
+    const equityAfterFlow = equity + flow
+    const pnl = pnlByDate.get(date) ?? 0
+
+    if (pnl !== 0 && equityAfterFlow > 0) {
+      result.set(date, {
+        pnlPercent: (pnl / equityAfterFlow) * 100,
+        equityStart: equityAfterFlow,
+        equityEnd: equityAfterFlow + pnl,
+      })
+    }
+
+    equity = equityAfterFlow + pnl
+  }
+
+  return result
 }
 
 export function computeSymbolStats(trades: Trade[]): SymbolStats[] {
