@@ -7,9 +7,6 @@ import { DailyJournalPage } from './pages/DailyJournalPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { AddTradePage } from './pages/AddTradePage'
 import { ImportCsvPage } from './pages/ImportCsvPage'
-import { seedSampleData } from './utils/sampleData'
-
-seedSampleData()
 
 export default function App() {
   return (

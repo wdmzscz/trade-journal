@@ -10,6 +10,7 @@ import { ChevronLeft, ChevronRight, StickyNote, CalendarDays } from 'lucide-reac
 import { useTradeStore } from '../hooks/useTradeStore'
 import { StatCard } from '../components/StatCard'
 import { PnlBadge } from '../components/PnlBadge'
+import { AccountScopeBanner } from '../components/AccountScopeBanner'
 import {
   computeDailyPnl,
   computeCumulativePnl,
@@ -28,14 +29,14 @@ const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const MONTHS = Array.from({ length: 12 }, (_, i) => i)
 
 export function CalendarPage() {
-  const { trades, journal } = useTradeStore()
+  const { filteredTrades, filteredJournal } = useTradeStore()
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
-  const dailyPnl = useMemo(() => computeDailyPnl(trades), [trades])
+  const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const pnlMap = useMemo(() => new Map(dailyPnl.map((d) => [d.date, d])), [dailyPnl])
-  const journalDates = useMemo(() => new Set(journal.map((j) => j.date)), [journal])
+  const journalDates = useMemo(() => new Set(filteredJournal.map((j) => j.date)), [filteredJournal])
 
   const monthDate = useMemo(() => new Date(selectedYear, selectedMonth, 1), [selectedYear, selectedMonth])
   const monthFrom = format(startOfMonth(monthDate), 'yyyy-MM-dd')
@@ -44,12 +45,12 @@ export function CalendarPage() {
   const yearTo = `${selectedYear}-12-31`
 
   const monthStats = useMemo(
-    () => computeCalendarStats(trades, journal, dailyPnl, monthFrom, monthTo),
-    [trades, journal, dailyPnl, monthFrom, monthTo]
+    () => computeCalendarStats(filteredTrades, filteredJournal, dailyPnl, monthFrom, monthTo),
+    [filteredTrades, filteredJournal, dailyPnl, monthFrom, monthTo]
   )
   const yearStats = useMemo(
-    () => computeCalendarStats(trades, journal, dailyPnl, yearFrom, yearTo),
-    [trades, journal, dailyPnl, yearFrom, yearTo]
+    () => computeCalendarStats(filteredTrades, filteredJournal, dailyPnl, yearFrom, yearTo),
+    [filteredTrades, filteredJournal, dailyPnl, yearFrom, yearTo]
   )
 
   const monthDaily = useMemo(
@@ -61,24 +62,24 @@ export function CalendarPage() {
 
   const monthTrades = useMemo(
     () =>
-      trades.filter(
+      filteredTrades.filter(
         (t) =>
           t.status === 'closed' &&
           t.exitDate &&
           t.exitDate.slice(0, 10) >= monthFrom &&
           t.exitDate.slice(0, 10) <= monthTo
       ),
-    [trades, monthFrom, monthTo]
+    [filteredTrades, monthFrom, monthTo]
   )
 
   const selectedDayTrades = useMemo(() => {
     if (!selectedDate) return []
-    return trades.filter(
+    return filteredTrades.filter(
       (t) =>
         t.entryDate.slice(0, 10) === selectedDate ||
         (t.exitDate && t.exitDate.slice(0, 10) === selectedDate)
     )
-  }, [trades, selectedDate])
+  }, [filteredTrades, selectedDate])
 
   const evaluationData = [
     { name: '盈利', value: monthStats.winningTrades, color: '#22c55e' },
@@ -93,6 +94,8 @@ export function CalendarPage() {
 
   return (
     <div className="space-y-6">
+      <AccountScopeBanner />
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Calendar</h1>

@@ -1,17 +1,29 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { PnlBadge } from '../components/PnlBadge'
+import { AccountScopeBanner } from '../components/AccountScopeBanner'
 import { computeDailyPnl } from '../utils/stats'
 
+const EMPTY_FORM = {
+  mood: '',
+  marketCondition: '',
+  preMarketPlan: '',
+  postMarketReview: '',
+  lessons: '',
+  goals: '',
+  rating: 3,
+}
+
 export function DailyJournalPage() {
-  const { trades, journal, saveJournal, getJournalByDate } = useTradeStore()
+  const { filteredTrades, filteredJournal, selectedAccount, saveJournal, getJournalByDate } = useTradeStore()
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [form, setForm] = useState(EMPTY_FORM)
 
-  const dailyPnl = useMemo(() => computeDailyPnl(trades), [trades])
+  const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const pnlMap = useMemo(() => new Map(dailyPnl.map((d) => [d.date, d])), [dailyPnl])
 
   const days = eachDayOfInterval({
@@ -21,17 +33,26 @@ export function DailyJournalPage() {
 
   const selectedEntry = getJournalByDate(selectedDate)
   const selectedPnl = pnlMap.get(selectedDate)
-  const dayTrades = trades.filter((t) => t.entryDate.slice(0, 10) === selectedDate || t.exitDate?.slice(0, 10) === selectedDate)
+  const dayTrades = filteredTrades.filter(
+    (t) => t.entryDate.slice(0, 10) === selectedDate || t.exitDate?.slice(0, 10) === selectedDate
+  )
 
-  const [form, setForm] = useState({
-    mood: selectedEntry?.mood ?? '',
-    marketCondition: selectedEntry?.marketCondition ?? '',
-    preMarketPlan: selectedEntry?.preMarketPlan ?? '',
-    postMarketReview: selectedEntry?.postMarketReview ?? '',
-    lessons: selectedEntry?.lessons ?? '',
-    goals: selectedEntry?.goals ?? '',
-    rating: selectedEntry?.rating ?? 3,
-  })
+  const journalDates = useMemo(() => new Set(filteredJournal.map((j) => j.date)), [filteredJournal])
+  const canEditJournal = selectedAccount !== 'all'
+
+  // 切换账户时重置表单和选中日期
+  useEffect(() => {
+    const entry = getJournalByDate(selectedDate)
+    setForm({
+      mood: entry?.mood ?? '',
+      marketCondition: entry?.marketCondition ?? '',
+      preMarketPlan: entry?.preMarketPlan ?? '',
+      postMarketReview: entry?.postMarketReview ?? '',
+      lessons: entry?.lessons ?? '',
+      goals: entry?.goals ?? '',
+      rating: entry?.rating ?? 3,
+    })
+  }, [selectedAccount, selectedDate, getJournalByDate])
 
   const loadFormForDate = (date: string) => {
     setSelectedDate(date)
@@ -48,18 +69,25 @@ export function DailyJournalPage() {
   }
 
   const handleSave = () => {
-    saveJournal({ ...form, date: selectedDate, id: selectedEntry?.id })
+    if (!canEditJournal) return
+    saveJournal({ ...form, date: selectedDate, account: selectedAccount, id: selectedEntry?.id })
     alert('日记已保存')
   }
 
-  const journalDates = new Set(journal.map((j) => j.date))
-
   return (
     <div className="space-y-6">
+      <AccountScopeBanner />
+
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Daily Journal</h1>
-        <p className="mt-1 text-sm text-slate-500">记录每日交易计划、复盘与心得</p>
+        <p className="mt-1 text-sm text-slate-500">记录每日交易计划、复盘与心得（按账户独立保存）</p>
       </div>
+
+      {!canEditJournal && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          请先选择具体账户标签页，再编辑该账户的日记。汇总视图下日记为只读。
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="rounded-xl border border-surface-200 bg-white p-5 shadow-sm">
@@ -135,17 +163,17 @@ export function DailyJournalPage() {
             </div>
           )}
 
-          <div className="rounded-xl border border-surface-200 bg-white p-5 shadow-sm">
+          <div className={`rounded-xl border border-surface-200 bg-white p-5 shadow-sm ${!canEditJournal ? 'opacity-60' : ''}`}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="心情" value={form.mood} onChange={(v) => setForm({ ...form, mood: v })} placeholder="平静 / 焦虑 / 自信..." />
-              <Field label="市场状况" value={form.marketCondition} onChange={(v) => setForm({ ...form, marketCondition: v })} placeholder="趋势 / 震荡 / 高波动..." />
+              <Field label="心情" value={form.mood} onChange={(v) => setForm({ ...form, mood: v })} placeholder="平静 / 焦虑 / 自信..." disabled={!canEditJournal} />
+              <Field label="市场状况" value={form.marketCondition} onChange={(v) => setForm({ ...form, marketCondition: v })} placeholder="趋势 / 震荡 / 高波动..." disabled={!canEditJournal} />
             </div>
 
             <div className="mt-4 space-y-4">
-              <TextArea label="盘前计划" value={form.preMarketPlan} onChange={(v) => setForm({ ...form, preMarketPlan: v })} placeholder="今日交易计划、关注标的、关键价位..." />
-              <TextArea label="盘后复盘" value={form.postMarketReview} onChange={(v) => setForm({ ...form, postMarketReview: v })} placeholder="执行情况、做得好的地方、需要改进..." />
-              <TextArea label="经验教训" value={form.lessons} onChange={(v) => setForm({ ...form, lessons: v })} placeholder="今天学到了什么？" />
-              <TextArea label="明日目标" value={form.goals} onChange={(v) => setForm({ ...form, goals: v })} placeholder="明天的改进目标..." />
+              <TextArea label="盘前计划" value={form.preMarketPlan} onChange={(v) => setForm({ ...form, preMarketPlan: v })} placeholder="今日交易计划、关注标的、关键价位..." disabled={!canEditJournal} />
+              <TextArea label="盘后复盘" value={form.postMarketReview} onChange={(v) => setForm({ ...form, postMarketReview: v })} placeholder="执行情况、做得好的地方、需要改进..." disabled={!canEditJournal} />
+              <TextArea label="经验教训" value={form.lessons} onChange={(v) => setForm({ ...form, lessons: v })} placeholder="今天学到了什么？" disabled={!canEditJournal} />
+              <TextArea label="明日目标" value={form.goals} onChange={(v) => setForm({ ...form, goals: v })} placeholder="明天的改进目标..." disabled={!canEditJournal} />
             </div>
 
             <div className="mt-4">
@@ -154,10 +182,11 @@ export function DailyJournalPage() {
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button
                     key={n}
+                    disabled={!canEditJournal}
                     onClick={() => setForm({ ...form, rating: n })}
                     className={`h-10 w-10 rounded-lg text-sm font-semibold transition-colors ${
                       form.rating === n ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                    } disabled:cursor-not-allowed`}
                   >
                     {n}
                   </button>
@@ -167,7 +196,8 @@ export function DailyJournalPage() {
 
             <button
               onClick={handleSave}
-              className="mt-6 w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+              disabled={!canEditJournal}
+              className="mt-6 w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               保存日记
             </button>
@@ -178,7 +208,7 @@ export function DailyJournalPage() {
   )
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+function Field({ label, value, onChange, placeholder, disabled }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }) {
   return (
     <div>
       <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
@@ -187,13 +217,14 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        disabled={disabled}
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
       />
     </div>
   )
 }
 
-function TextArea({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+function TextArea({ label, value, onChange, placeholder, disabled }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }) {
   return (
     <div>
       <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
@@ -202,7 +233,8 @@ function TextArea({ label, value, onChange, placeholder }: { label: string; valu
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={3}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        disabled={disabled}
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
       />
     </div>
   )

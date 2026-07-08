@@ -7,8 +7,10 @@ import type { TradeSide, TradeStatus } from '../types'
 const SETUPS = ['Breakout', 'Pullback', 'Reversal', 'Gap & Go', 'Trend', 'Scalp', 'Other']
 
 export function AddTradePage() {
-  const { addTrade } = useTradeStore()
+  const { addTrade, selectedAccount, accounts } = useTradeStore()
   const navigate = useNavigate()
+
+  const defaultAccount = selectedAccount !== 'all' ? selectedAccount : accounts[0] ?? 'Default'
 
   const [form, setForm] = useState({
     symbol: '',
@@ -23,7 +25,7 @@ export function AddTradePage() {
     setup: '',
     tags: '',
     notes: '',
-    account: 'Default',
+    account: defaultAccount,
     rMultiple: '',
   })
 

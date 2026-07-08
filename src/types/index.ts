@@ -1,11 +1,31 @@
 export type TradeSide = 'long' | 'short'
 export type TradeStatus = 'open' | 'closed'
 
+export type AssetClass = 'futures' | 'stock' | 'option' | 'forex' | 'other'
+
+export type AccountType = 'futures' | 'stock' | 'other'
+
+export interface AccountProfile {
+  id: string
+  label: string
+  type: AccountType
+  createdAt: string
+}
+
+export interface AccountInfo {
+  id: string
+  label: string
+  type: AccountType
+  tradeCount: number
+  totalPnl: number
+}
+
 export interface Trade {
   id: string
   symbol: string
   side: TradeSide
   status: TradeStatus
+  assetClass?: AssetClass
   entryDate: string
   exitDate?: string
   entryPrice: number
@@ -25,6 +45,7 @@ export interface Trade {
 export interface JournalEntry {
   id: string
   date: string
+  account: string
   mood?: string
   marketCondition?: string
   preMarketPlan?: string

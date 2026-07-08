@@ -2,6 +2,16 @@ import Papa from 'papaparse'
 import { v4 as uuidv4 } from 'uuid'
 import type { Trade } from '../types'
 import { calculateTradePnl } from './stats'
+import { isIbkrStatement, parseIbkrStatement } from './ibkrImport'
+
+export type CsvFormat = 'generic' | 'ibkr'
+
+export interface CsvParseResult {
+  trades: Trade[]
+  errors: string[]
+  format: CsvFormat
+  account?: string
+}
 
 export interface CsvRow {
   Symbol?: string
@@ -100,34 +110,52 @@ export function parseTradeFromRow(row: CsvRow): Trade | null {
   }
 }
 
-export function parseCsvFile(file: File): Promise<{ trades: Trade[]; errors: string[] }> {
+export function parseCsvText(text: string): CsvParseResult {
+  if (isIbkrStatement(text)) {
+    const result = parseIbkrStatement(text)
+    return {
+      trades: result.trades,
+      errors: result.errors,
+      format: 'ibkr',
+      account: result.account,
+    }
+  }
+
+  const parsed = Papa.parse<CsvRow>(text, {
+    header: true,
+    skipEmptyLines: true,
+  })
+
+  const trades: Trade[] = []
+  const errors: string[] = []
+
+  parsed.data.forEach((row, index) => {
+    try {
+      const trade = parseTradeFromRow(row)
+      if (trade) {
+        trades.push(trade)
+      } else if (Object.values(row).some((v) => v)) {
+        errors.push(`第 ${index + 2} 行：缺少 Symbol 字段`)
+      }
+    } catch (e) {
+      errors.push(`第 ${index + 2} 行：${e instanceof Error ? e.message : '解析失败'}`)
+    }
+  })
+
+  return { trades, errors, format: 'generic' }
+}
+
+export function parseCsvFile(file: File): Promise<CsvParseResult> {
   return new Promise((resolve) => {
-    Papa.parse<CsvRow>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const trades: Trade[] = []
-        const errors: string[] = []
-
-        results.data.forEach((row, index) => {
-          try {
-            const trade = parseTradeFromRow(row)
-            if (trade) {
-              trades.push(trade)
-            } else if (Object.values(row).some((v) => v)) {
-              errors.push(`第 ${index + 2} 行：缺少 Symbol 字段`)
-            }
-          } catch (e) {
-            errors.push(`第 ${index + 2} 行：${e instanceof Error ? e.message : '解析失败'}`)
-          }
-        })
-
-        resolve({ trades, errors })
-      },
-      error: (error) => {
-        resolve({ trades: [], errors: [error.message] })
-      },
-    })
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = String(reader.result ?? '')
+      resolve(parseCsvText(text))
+    }
+    reader.onerror = () => {
+      resolve({ trades: [], errors: ['文件读取失败'], format: 'generic' })
+    }
+    reader.readAsText(file)
   })
 }
 

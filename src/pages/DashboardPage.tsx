@@ -9,6 +9,7 @@ import {
 import { useTradeStore } from '../hooks/useTradeStore'
 import { StatCard } from '../components/StatCard'
 import { PnlBadge } from '../components/PnlBadge'
+import { AccountScopeBanner } from '../components/AccountScopeBanner'
 import {
   computeDashboardStats, computeDailyPnl, computeCumulativePnl,
   computeSymbolStats, computeSetupStats, computeWinLossDistribution,
@@ -16,23 +17,25 @@ import {
 } from '../utils/stats'
 
 export function DashboardPage() {
-  const { trades } = useTradeStore()
+  const { filteredTrades } = useTradeStore()
 
-  const stats = useMemo(() => computeDashboardStats(trades), [trades])
-  const dailyPnl = useMemo(() => computeDailyPnl(trades), [trades])
+  const stats = useMemo(() => computeDashboardStats(filteredTrades), [filteredTrades])
+  const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const cumulativePnl = useMemo(() => computeCumulativePnl(dailyPnl), [dailyPnl])
-  const symbolStats = useMemo(() => computeSymbolStats(trades).slice(0, 8), [trades])
-  const setupStats = useMemo(() => computeSetupStats(trades).slice(0, 6), [trades])
-  const winLoss = useMemo(() => computeWinLossDistribution(trades), [trades])
-  const dayOfWeek = useMemo(() => computeDayOfWeekStats(trades), [trades])
+  const symbolStats = useMemo(() => computeSymbolStats(filteredTrades).slice(0, 8), [filteredTrades])
+  const setupStats = useMemo(() => computeSetupStats(filteredTrades).slice(0, 6), [filteredTrades])
+  const winLoss = useMemo(() => computeWinLossDistribution(filteredTrades), [filteredTrades])
+  const dayOfWeek = useMemo(() => computeDayOfWeekStats(filteredTrades), [filteredTrades])
 
   const recentTrades = useMemo(
-    () => [...trades].sort((a, b) => b.entryDate.localeCompare(a.entryDate)).slice(0, 8),
-    [trades]
+    () => [...filteredTrades].sort((a, b) => b.entryDate.localeCompare(a.entryDate)).slice(0, 8),
+    [filteredTrades]
   )
 
   return (
     <div className="space-y-6">
+      <AccountScopeBanner />
+
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">交易表现总览与数据分析</p>

@@ -2,32 +2,34 @@ import { useMemo, useState } from 'react'
 import { Search, Trash2, Download } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { PnlBadge } from '../components/PnlBadge'
+import { AccountScopeBanner } from '../components/AccountScopeBanner'
 import { filterTrades } from '../utils/stats'
 import { exportTradesToCsv } from '../utils/csvImport'
 import type { TradeSide, TradeStatus } from '../types'
 
 export function TradesPage() {
-  const { trades, deleteTrade, accounts } = useTradeStore()
+  const { filteredTrades, deleteTrade } = useTradeStore()
   const [search, setSearch] = useState('')
   const [symbol, setSymbol] = useState('all')
   const [side, setSide] = useState<TradeSide | 'all'>('all')
   const [status, setStatus] = useState<TradeStatus | 'all'>('all')
-  const [account, setAccount] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
-  const symbols = useMemo(() => [...new Set(trades.map((t) => t.symbol))].sort(), [trades])
+  const symbols = useMemo(() => [...new Set(filteredTrades.map((t) => t.symbol))].sort(), [filteredTrades])
 
   const filtered = useMemo(
-    () => filterTrades(trades, { search, symbol, side, status, account, dateFrom, dateTo })
+    () => filterTrades(filteredTrades, { search, symbol, side, status, dateFrom, dateTo })
       .sort((a, b) => b.entryDate.localeCompare(a.entryDate)),
-    [trades, search, symbol, side, status, account, dateFrom, dateTo]
+    [filteredTrades, search, symbol, side, status, dateFrom, dateTo]
   )
 
   const totalPnl = filtered.filter((t) => t.status === 'closed').reduce((s, t) => s + t.pnl, 0)
 
   return (
     <div className="space-y-6">
+      <AccountScopeBanner />
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Trades</h1>
@@ -45,7 +47,7 @@ export function TradesPage() {
       </div>
 
       <div className="rounded-xl border border-surface-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <div className="relative sm:col-span-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -59,7 +61,6 @@ export function TradesPage() {
           <Select value={symbol} onChange={setSymbol} options={[{ value: 'all', label: '全部标的' }, ...symbols.map((s) => ({ value: s, label: s }))]} />
           <Select value={side} onChange={(v) => setSide(v as TradeSide | 'all')} options={[{ value: 'all', label: '全部方向' }, { value: 'long', label: '做多' }, { value: 'short', label: '做空' }]} />
           <Select value={status} onChange={(v) => setStatus(v as TradeStatus | 'all')} options={[{ value: 'all', label: '全部状态' }, { value: 'closed', label: '已平仓' }, { value: 'open', label: '持仓中' }]} />
-          <Select value={account} onChange={setAccount} options={[{ value: 'all', label: '全部账户' }, ...accounts.map((a) => ({ value: a, label: a }))]} />
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
         </div>
@@ -72,6 +73,7 @@ export function TradesPage() {
               <tr className="text-left text-slate-500">
                 <th className="px-4 py-3 font-medium">入场日期</th>
                 <th className="px-4 py-3 font-medium">标的</th>
+                <th className="px-4 py-3 font-medium">类型</th>
                 <th className="px-4 py-3 font-medium">方向</th>
                 <th className="px-4 py-3 font-medium">入场价</th>
                 <th className="px-4 py-3 font-medium">出场价</th>
@@ -86,7 +88,7 @@ export function TradesPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={12} className="px-4 py-12 text-center text-slate-400">
                     暂无交易记录
                   </td>
                 </tr>
@@ -95,6 +97,7 @@ export function TradesPage() {
                   <tr key={trade.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="px-4 py-3 text-slate-600">{trade.entryDate.slice(0, 10)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">{trade.symbol}</td>
+                    <td className="px-4 py-3 text-slate-600">{trade.setup ?? trade.assetClass ?? '-'}</td>
                     <td className="px-4 py-3">
                       <span className={trade.side === 'long' ? 'text-emerald-600' : 'text-red-500'}>
                         {trade.side === 'long' ? '做多' : '做空'}
