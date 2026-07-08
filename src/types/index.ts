@@ -82,3 +82,43 @@ export interface SetupStats {
   trades: number
   winRate: number
 }
+
+export type DayResult = 'win' | 'loss' | 'breakeven' | 'none'
+
+export interface CalendarStats {
+  totalPnl: number
+  totalTrades: number
+  winningTrades: number
+  losingTrades: number
+  breakEvenTrades: number
+  winRate: number
+  profitFactor: number
+  avgWin: number
+  avgLoss: number
+  avgTradePnl: number
+  largestWin: number
+  largestLoss: number
+  totalTradingDays: number
+  winningDays: number
+  losingDays: number
+  breakevenDays: number
+  loggedDays: number
+  maxConsecutiveWins: number
+  maxConsecutiveLosses: number
+  maxConsecutiveWinningDays: number
+  maxConsecutiveLosingDays: number
+  avgDailyPnl: number
+  avgWinningDayPnl: number
+  avgLosingDayPnl: number
+  largestProfitableDay: number
+  largestLosingDay: number
+  totalFees: number
+  openTrades: number
+  expectancy: number
+}
+
+export interface CalendarWeekRow {
+  days: (string | null)[]
+  weekPnl: number
+  weekTrades: number
+}

@@ -6,12 +6,14 @@ import {
   PlusCircle,
   Upload,
   TrendingUp,
+  CalendarDays,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/trades', label: 'Trades', icon: List },
+  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/journal', label: 'Daily Journal', icon: BookOpen },
   { to: '/add-trade', label: 'Add Trade', icon: PlusCircle },
   { to: '/import', label: 'Import CSV', icon: Upload },
