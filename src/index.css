@@ -3,13 +3,50 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     @apply bg-surface-50 text-slate-900 antialiased;
+    overflow-x: hidden;
+  }
+}
+
+@layer utilities {
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .pb-nav-safe {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (min-width: 1024px) {
+    .pb-nav-safe {
+      padding-bottom: 0;
+    }
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
   }
 }
 
 @layer components {
   .form-input {
-    @apply w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+    @apply w-full rounded-lg border border-slate-200 px-3 py-2.5 text-base sm:text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+  }
+
+  .page-title {
+    @apply text-xl font-bold text-slate-900 sm:text-2xl;
+  }
+
+  .page-subtitle {
+    @apply mt-1 text-xs text-slate-500 sm:text-sm;
   }
 }

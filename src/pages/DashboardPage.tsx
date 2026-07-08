@@ -37,8 +37,8 @@ export function DashboardPage() {
       <AccountScopeBanner />
 
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">交易表现总览与数据分析</p>
+        <h1 className="page-title">Dashboard</h1>
+        <p className="page-subtitle">交易表现总览与数据分析</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

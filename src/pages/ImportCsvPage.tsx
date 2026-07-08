@@ -5,17 +5,18 @@ import { parseCsvFile, downloadCsvTemplate } from '../utils/csvImport'
 import type { Trade } from '../types'
 import type { CsvFormat } from '../utils/csvImport'
 import { PnlBadge } from '../components/PnlBadge'
-import { formatCurrency } from '../utils/stats'
+import { StorageInfo } from '../components/StorageInfo'
 
 export function ImportCsvPage() {
   const { importTrades, setSelectedAccount } = useTradeStore()
   const [dragOver, setDragOver] = useState(false)
   const [preview, setPreview] = useState<Trade[]>([])
   const [errors, setErrors] = useState<string[]>([])
-  const [imported, setImported] = useState(false)
+  const [importResult, setImportResult] = useState<{ added: number; skipped: number; replaced: boolean } | null>(null)
   const [format, setFormat] = useState<CsvFormat | null>(null)
   const [detectedAccount, setDetectedAccount] = useState<string | null>(null)
-  const [replaceExisting, setReplaceExisting] = useState(true)
+  /** merge=追加去重（默认）；replace=替换该账户全部记录 */
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.endsWith('.csv')) {
@@ -27,7 +28,7 @@ export function ImportCsvPage() {
     setErrors(result.errors)
     setFormat(result.format)
     setDetectedAccount(result.account ?? null)
-    setImported(false)
+    setImportResult(null)
   }, [])
 
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -44,13 +45,13 @@ export function ImportCsvPage() {
 
   const handleImport = () => {
     if (preview.length === 0) return
-    importTrades(preview, {
-      replaceAccount: replaceExisting && detectedAccount ? detectedAccount : undefined,
+    const result = importTrades(preview, {
+      replaceAccount: importMode === 'replace' && detectedAccount ? detectedAccount : undefined,
     })
     if (detectedAccount) {
       setSelectedAccount(detectedAccount)
     }
-    setImported(true)
+    setImportResult(result)
     setPreview([])
     setFormat(null)
     setDetectedAccount(null)
@@ -60,22 +61,35 @@ export function ImportCsvPage() {
   const symbols = [...new Set(preview.map((t) => t.symbol))]
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-5 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Import CSV</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="page-title">Import CSV</h1>
+        <p className="page-subtitle">
           支持 TradeZella 通用格式，以及 Interactive Brokers (IBKR) 活动账单
         </p>
       </div>
 
-      {imported && (
-        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
-          <CheckCircle className="h-5 w-5" />
-          <span className="text-sm font-medium">导入成功！交易已添加到 Trades 列表，Dashboard 和 Calendar 已更新。</span>
+      <StorageInfo className="rounded-xl border border-surface-200 bg-white p-4 shadow-sm" />
+
+      {importResult && (
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
+          <CheckCircle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="text-sm">
+            <p className="font-medium">导入成功</p>
+            {importResult.replaced ? (
+              <p className="mt-1">已替换该账户全部记录，导入 {importResult.added} 笔交易。</p>
+            ) : (
+              <p className="mt-1">
+                新增 {importResult.added} 笔
+                {importResult.skipped > 0 && `，跳过 ${importResult.skipped} 笔重复记录`}
+                。历史数据已保留。
+              </p>
+            )}
+          </div>
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
         <button
           onClick={downloadCsvTemplate}
           className="flex items-center gap-3 rounded-xl border border-surface-200 bg-white p-4 text-left shadow-sm hover:bg-slate-50"
@@ -95,7 +109,7 @@ export function ImportCsvPage() {
           </div>
           <div>
             <p className="font-semibold text-slate-900">IBKR 活动账单</p>
-            <p className="text-xs text-slate-500">自动识别账户号，配对期货开/平仓，使用已实现损益</p>
+            <p className="text-xs text-slate-500">自动识别账户，配对期货开/平仓</p>
           </div>
         </div>
       </div>
@@ -104,32 +118,45 @@ export function ImportCsvPage() {
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
-        className={`rounded-xl border-2 border-dashed p-12 text-center transition-colors ${
+        className={`rounded-xl border-2 border-dashed p-8 text-center transition-colors sm:p-12 ${
           dragOver ? 'border-brand-500 bg-brand-50' : 'border-slate-300 bg-white'
         }`}
       >
         <Upload className="mx-auto h-10 w-10 text-slate-400" />
         <p className="mt-3 text-sm font-medium text-slate-700">拖拽 CSV 文件到此处</p>
         <p className="mt-1 text-xs text-slate-400">支持 IBKR 活动账单 或 TradeZella 格式</p>
-        <label className="mt-3 inline-block cursor-pointer rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
+        <label className="mt-4 inline-flex min-h-[44px] cursor-pointer items-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
           选择文件
           <input type="file" accept=".csv" onChange={onFileSelect} className="hidden" />
         </label>
       </div>
 
+      {preview.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-sm font-semibold text-slate-800">导入方式</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className={`flex cursor-pointer gap-3 rounded-xl border-2 p-3 ${importMode === 'merge' ? 'border-brand-500 bg-brand-50' : 'border-slate-200'}`}>
+              <input type="radio" name="importMode" checked={importMode === 'merge'} onChange={() => setImportMode('merge')} className="mt-1" />
+              <div>
+                <p className="text-sm font-medium text-slate-900">合并追加（推荐）</p>
+                <p className="mt-0.5 text-xs text-slate-500">保留旧记录，只添加新交易，自动跳过重复</p>
+              </div>
+            </label>
+            <label className={`flex cursor-pointer gap-3 rounded-xl border-2 p-3 ${importMode === 'replace' ? 'border-brand-500 bg-brand-50' : 'border-slate-200'}`}>
+              <input type="radio" name="importMode" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} className="mt-1" />
+              <div>
+                <p className="text-sm font-medium text-slate-900">完全替换</p>
+                <p className="mt-0.5 text-xs text-slate-500">删除该账户已有记录，用本次 CSV 覆盖</p>
+              </div>
+            </label>
+          </div>
+        </div>
+      )}
+
       {format === 'ibkr' && preview.length > 0 && (
         <div className="rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm text-brand-900">
           <p className="font-semibold">已识别为 IBKR 活动账单</p>
-          <p className="mt-1">账户：<strong>{detectedAccount}</strong> · {preview.length} 笔已配对交易 · 标的：{symbols.join(', ')}</p>
-          <label className="mt-3 flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={replaceExisting}
-              onChange={(e) => setReplaceExisting(e.target.checked)}
-              className="rounded border-brand-300"
-            />
-            <span>替换该账户的已有交易记录（推荐，避免重复导入）</span>
-          </label>
+          <p className="mt-1 break-words">账户：<strong>{detectedAccount}</strong> · {preview.length} 笔 · {symbols.join(', ')}</p>
         </div>
       )}
 
@@ -143,26 +170,22 @@ export function ImportCsvPage() {
             {errors.slice(0, 5).map((err, i) => (
               <li key={i} className="text-xs text-amber-700">{err}</li>
             ))}
-            {errors.length > 5 && <li className="text-xs text-amber-600">...还有 {errors.length - 5} 条</li>}
           </ul>
         </div>
       )}
 
       {preview.length > 0 && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="font-semibold text-slate-900">预览 ({preview.length} 笔交易)</h3>
+              <h3 className="font-semibold text-slate-900">预览 ({preview.length} 笔)</h3>
               <p className="text-sm text-slate-500">
                 总盈亏 <PnlBadge value={totalPnl} className="ml-1" />
-                {format === 'ibkr' && (
-                  <span className="ml-2 text-slate-400">（与 IBKR 已实现损益一致：{formatCurrency(totalPnl)}）</span>
-                )}
               </p>
             </div>
             <button
               onClick={handleImport}
-              className="rounded-lg bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+              className="min-h-[44px] rounded-lg bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
             >
               确认导入
             </button>
@@ -170,34 +193,24 @@ export function ImportCsvPage() {
 
           <div className="overflow-hidden rounded-xl border border-surface-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead className="bg-slate-50">
                   <tr className="text-left text-slate-500">
-                    <th className="px-4 py-3 font-medium">标的</th>
-                    <th className="px-4 py-3 font-medium">类型</th>
-                    <th className="px-4 py-3 font-medium">方向</th>
-                    <th className="px-4 py-3 font-medium">入场</th>
-                    <th className="px-4 py-3 font-medium">出场</th>
-                    <th className="px-4 py-3 font-medium">入场价</th>
-                    <th className="px-4 py-3 font-medium">出场价</th>
-                    <th className="px-4 py-3 font-medium">数量</th>
-                    <th className="px-4 py-3 font-medium">账户</th>
-                    <th className="px-4 py-3 text-right font-medium">盈亏</th>
+                    <th className="px-3 py-3 font-medium sm:px-4">标的</th>
+                    <th className="px-3 py-3 font-medium sm:px-4">方向</th>
+                    <th className="px-3 py-3 font-medium sm:px-4">入场</th>
+                    <th className="px-3 py-3 font-medium sm:px-4">出场</th>
+                    <th className="px-3 py-3 text-right font-medium sm:px-4">盈亏</th>
                   </tr>
                 </thead>
                 <tbody>
                   {preview.slice(0, 20).map((trade) => (
                     <tr key={trade.id} className="border-t border-slate-100">
-                      <td className="px-4 py-2.5 font-semibold">{trade.symbol}</td>
-                      <td className="px-4 py-2.5">{trade.setup ?? '-'}</td>
-                      <td className="px-4 py-2.5">{trade.side === 'long' ? '做多' : '做空'}</td>
-                      <td className="px-4 py-2.5 text-slate-600">{trade.entryDate.slice(0, 10)}</td>
-                      <td className="px-4 py-2.5 text-slate-600">{trade.exitDate?.slice(0, 10) ?? '-'}</td>
-                      <td className="px-4 py-2.5">${trade.entryPrice.toFixed(2)}</td>
-                      <td className="px-4 py-2.5">{trade.exitPrice ? `$${trade.exitPrice.toFixed(2)}` : '-'}</td>
-                      <td className="px-4 py-2.5">{trade.quantity}</td>
-                      <td className="px-4 py-2.5 text-slate-600">{trade.account}</td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-3 py-2.5 font-semibold sm:px-4">{trade.symbol}</td>
+                      <td className="px-3 py-2.5 sm:px-4">{trade.side === 'long' ? '做多' : '做空'}</td>
+                      <td className="px-3 py-2.5 text-slate-600 sm:px-4">{trade.entryDate.slice(0, 10)}</td>
+                      <td className="px-3 py-2.5 text-slate-600 sm:px-4">{trade.exitDate?.slice(0, 10) ?? '-'}</td>
+                      <td className="px-3 py-2.5 text-right sm:px-4">
                         {trade.status === 'closed' ? <PnlBadge value={trade.pnl} /> : '-'}
                       </td>
                     </tr>
@@ -205,30 +218,17 @@ export function ImportCsvPage() {
                 </tbody>
               </table>
             </div>
-            {preview.length > 20 && (
-              <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">
-                仅显示前 20 条，共 {preview.length} 条
-              </p>
-            )}
           </div>
         </div>
       )}
 
-      <div className="rounded-xl border border-surface-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-3 font-semibold text-slate-900">格式说明</h3>
+      <div className="rounded-xl border border-surface-200 bg-white p-4 shadow-sm sm:p-5">
+        <h3 className="mb-3 font-semibold text-slate-900">数据存储说明</h3>
         <div className="space-y-3 text-sm text-slate-600">
-          <div>
-            <p className="font-medium text-slate-800">IBKR 活动账单（推荐用于期货账户）</p>
-            <p className="mt-1">从 IBKR 门户下载活动账单 CSV，系统自动提取账户号（如 U25840333），将开仓(O)和平仓(C)配对为完整交易，盈亏使用 IBKR 的「已实现损益」。</p>
-          </div>
-          <div>
-            <p className="font-medium text-slate-800">TradeZella 通用格式</p>
-            <p className="mt-1">字段：Symbol, Side, Entry/Exit Date, Price, Quantity, Fees, Account 等。适合手动录入或股票账户导出。</p>
-          </div>
-          <div>
-            <p className="font-medium text-slate-800">多账户</p>
-            <p className="mt-1">分别导入各账户的 CSV，顶部账户选择器可切换查看期货账户和股票账户的数据。</p>
-          </div>
+          <p>数据保存在<strong className="text-slate-800">你当前使用的浏览器</strong>里（localStorage），不会自动同步到云端或其他设备。</p>
+          <p>部署到 Vercel / GitHub Pages 等静态网站后，访问方式不变——仍是本地存储。换手机或换浏览器需要重新导入，或自行导出 CSV 备份。</p>
+          <p>每月上传新 CSV 时，选择<strong className="text-slate-800">「合并追加」</strong>：旧记录保留，新交易追加，重复交易自动跳过。</p>
+          <p>容量：一般浏览器限制约 5–10 MB，可存<strong className="text-slate-800">数万笔</strong>交易，日常使用足够。</p>
         </div>
       </div>
     </div>

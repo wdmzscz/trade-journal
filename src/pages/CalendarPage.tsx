@@ -98,8 +98,8 @@ export function CalendarPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Calendar</h1>
-          <p className="mt-1 text-sm text-slate-500">年历与月历视图，追踪每日盈亏与交易表现</p>
+          <h1 className="page-title">Calendar</h1>
+          <p className="page-subtitle">年历与月历视图，追踪每日盈亏与交易表现</p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-surface-200 bg-white px-3 py-2 shadow-sm">
           <button

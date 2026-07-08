@@ -91,7 +91,7 @@ export function AccountTabs() {
 
   return (
     <>
-      <div className="sticky top-0 z-20 -mx-6 -mt-6 border-b border-slate-200 bg-[#e8eaed] px-4 lg:-mx-8 lg:-mt-8">
+      <div className="sticky top-0 z-20 -mx-3 -mt-4 border-b border-slate-200 bg-[#e8eaed] px-2 sm:-mx-5 sm:px-3 lg:-mx-8 lg:-mt-8 lg:px-4">
         <div className="flex items-end gap-1 overflow-x-auto pb-0 pt-3 scrollbar-thin">
           <TabButton
             active={selectedAccount === 'all'}
@@ -138,14 +138,23 @@ export function AccountTabs() {
           </button>
 
           {accountInfos.length > 0 && (
-            <button
-              onClick={openManage}
-              title="账户管理"
-              className="mb-0.5 flex h-[38px] shrink-0 items-center gap-1.5 rounded-t-lg px-3 text-xs font-medium text-slate-500 transition-colors hover:bg-white/60 hover:text-slate-700"
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-              管理
-            </button>
+            <>
+              <button
+                onClick={openManage}
+                title="账户管理"
+                className="mb-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-t-lg text-slate-500 transition-colors hover:bg-white/60 hover:text-slate-700 sm:hidden"
+              >
+                <Settings2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={openManage}
+                title="账户管理"
+                className="mb-0.5 hidden shrink-0 items-center gap-1.5 rounded-t-lg px-2 text-xs font-medium text-slate-500 transition-colors hover:bg-white/60 hover:text-slate-700 sm:flex sm:px-3"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                管理
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -304,7 +313,7 @@ function TabButton({
     <button
       onClick={onClick}
       className={cn(
-        'group relative flex min-w-[140px] max-w-[200px] shrink-0 flex-col rounded-t-xl border px-4 py-2.5 text-left transition-all',
+        'group relative flex min-w-[108px] max-w-[160px] shrink-0 flex-col rounded-t-xl border px-3 py-2 sm:min-w-[140px] sm:max-w-[200px] sm:px-4 sm:py-2.5 text-left transition-all',
         active
           ? 'z-10 border-slate-200 border-b-white bg-white shadow-[0_-1px_3px_rgba(0,0,0,0.04)]'
           : 'border-transparent bg-white/40 text-slate-600 hover:bg-white/70'

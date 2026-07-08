@@ -1,12 +1,32 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType } from '../types'
 import { calculateTradePnl } from '../utils/stats'
+import { mergeTrades } from '../utils/storage'
+import { isCloudEnabled } from '../lib/supabase'
+import {
+  fetchAllData,
+  uploadAllData,
+  upsertTrade,
+  deleteTradeCloud,
+  upsertTrades,
+  deleteTradesByAccount,
+  upsertJournal,
+  deleteJournalCloud,
+  deleteJournalByAccount,
+  upsertProfile,
+  deleteProfileCloud,
+  subscribeToChanges,
+} from '../lib/cloudSync'
 
 const TRADES_KEY = 'trade-journal-trades'
 const JOURNAL_KEY = 'trade-journal-journal'
 const ACCOUNT_KEY = 'trade-journal-selected-account'
 const PROFILES_KEY = 'trade-journal-account-profiles'
+
+function accountKey(userId?: string) {
+  return userId ? `${ACCOUNT_KEY}-${userId}` : ACCOUNT_KEY
+}
 
 function loadTrades(): Trade[] {
   try {
@@ -35,8 +55,8 @@ function loadProfiles(): AccountProfile[] {
   }
 }
 
-function loadSelectedAccount(): string {
-  return localStorage.getItem(ACCOUNT_KEY) ?? 'all'
+function loadSelectedAccount(userId?: string): string {
+  return localStorage.getItem(accountKey(userId)) ?? 'all'
 }
 
 function inferAccountType(trades: Trade[]): AccountType {
@@ -46,6 +66,8 @@ function inferAccountType(trades: Trade[]): AccountType {
   if (stocks > futures) return 'stock'
   return 'other'
 }
+
+export type SyncStatus = 'idle' | 'loading' | 'syncing' | 'error'
 
 interface TradeStoreContextValue {
   trades: Trade[]
@@ -63,11 +85,13 @@ interface TradeStoreContextValue {
   addTrade: (trade: Omit<Trade, 'id' | 'createdAt' | 'updatedAt' | 'pnl'> & { pnl?: number }) => void
   updateTrade: (id: string, updates: Partial<Trade>) => void
   deleteTrade: (id: string) => void
-  importTrades: (trades: Trade[], options?: { replaceAccount?: string }) => void
+  importTrades: (trades: Trade[], options?: { replaceAccount?: string }) => { added: number; skipped: number; replaced: boolean }
   saveJournal: (entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void
   deleteJournal: (id: string) => void
   getJournalByDate: (date: string) => JournalEntry | undefined
   accounts: string[]
+  syncStatus: SyncStatus
+  cloudEnabled: boolean
 }
 
 const TradeStoreContext = createContext<TradeStoreContextValue | null>(null)
@@ -77,27 +101,122 @@ function computePnl(trade: Partial<Trade> & Pick<Trade, 'side' | 'entryPrice' | 
   return calculateTradePnl(trade.side, trade.entryPrice, trade.exitPrice, trade.quantity, trade.fees)
 }
 
-export function TradeStoreProvider({ children }: { children: ReactNode }) {
-  const [trades, setTrades] = useState<Trade[]>(loadTrades)
-  const [journal, setJournal] = useState<JournalEntry[]>(loadJournal)
-  const [accountProfiles, setAccountProfiles] = useState<AccountProfile[]>(loadProfiles)
-  const [selectedAccount, setSelectedAccountState] = useState<string>(loadSelectedAccount)
+export function TradeStoreProvider({
+  children,
+  userId,
+}: {
+  children: ReactNode
+  userId?: string
+}) {
+  const cloudEnabled = isCloudEnabled() && Boolean(userId)
+  const userIdRef = useRef(userId)
+  userIdRef.current = userId
+
+  const [trades, setTrades] = useState<Trade[]>(() => (cloudEnabled ? [] : loadTrades()))
+  const [journal, setJournal] = useState<JournalEntry[]>(() => (cloudEnabled ? [] : loadJournal()))
+  const [accountProfiles, setAccountProfiles] = useState<AccountProfile[]>(() =>
+    cloudEnabled ? [] : loadProfiles()
+  )
+  const [selectedAccount, setSelectedAccountState] = useState<string>(() => loadSelectedAccount(userId))
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloudEnabled ? 'loading' : 'idle')
+  const [cloudReady, setCloudReady] = useState(!cloudEnabled)
+
+  const refetchFromCloud = useCallback(async () => {
+    if (!userIdRef.current) return
+    try {
+      const data = await fetchAllData(userIdRef.current)
+      setTrades(data.trades)
+      setJournal(data.journal)
+      setAccountProfiles(data.profiles)
+      setSyncStatus('idle')
+    } catch {
+      setSyncStatus('error')
+    }
+  }, [])
 
   useEffect(() => {
+    if (!cloudEnabled || !userId) return
+
+    let cancelled = false
+
+    async function init() {
+      setSyncStatus('loading')
+      try {
+        let data = await fetchAllData(userId!)
+
+        if (data.trades.length === 0 && data.journal.length === 0 && data.profiles.length === 0) {
+          const localTrades = loadTrades()
+          const localJournal = loadJournal()
+          const localProfiles = loadProfiles()
+          if (localTrades.length > 0 || localJournal.length > 0 || localProfiles.length > 0) {
+            await uploadAllData(userId!, {
+              trades: localTrades,
+              journal: localJournal,
+              profiles: localProfiles,
+            })
+            data = { trades: localTrades, journal: localJournal, profiles: localProfiles }
+          }
+        }
+
+        if (!cancelled) {
+          setTrades(data.trades)
+          setJournal(data.journal)
+          setAccountProfiles(data.profiles)
+          setSyncStatus('idle')
+          setCloudReady(true)
+        }
+      } catch {
+        if (!cancelled) setSyncStatus('error')
+      }
+    }
+
+    init()
+    return () => {
+      cancelled = true
+    }
+  }, [cloudEnabled, userId])
+
+  useEffect(() => {
+    if (!cloudEnabled || !userId || !cloudReady) return
+
+    const channel = subscribeToChanges(userId, () => {
+      refetchFromCloud()
+    })
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [cloudEnabled, userId, cloudReady, refetchFromCloud])
+
+  useEffect(() => {
+    if (!cloudReady) return
     localStorage.setItem(TRADES_KEY, JSON.stringify(trades))
-  }, [trades])
+  }, [trades, cloudReady])
 
   useEffect(() => {
+    if (!cloudReady) return
     localStorage.setItem(JOURNAL_KEY, JSON.stringify(journal))
-  }, [journal])
+  }, [journal, cloudReady])
 
   useEffect(() => {
+    if (!cloudReady) return
     localStorage.setItem(PROFILES_KEY, JSON.stringify(accountProfiles))
-  }, [accountProfiles])
+  }, [accountProfiles, cloudReady])
 
   useEffect(() => {
-    localStorage.setItem(ACCOUNT_KEY, selectedAccount)
-  }, [selectedAccount])
+    localStorage.setItem(accountKey(userId), selectedAccount)
+  }, [selectedAccount, userId])
+
+  const cloudWrite = useCallback(async (fn: () => Promise<void>) => {
+    if (!cloudEnabled || !userIdRef.current) return
+    setSyncStatus('syncing')
+    try {
+      await fn()
+      setSyncStatus('idle')
+    } catch {
+      setSyncStatus('error')
+    }
+  }, [cloudEnabled])
 
   const setSelectedAccount = useCallback((account: string) => {
     setSelectedAccountState(account)
@@ -107,50 +226,73 @@ export function TradeStoreProvider({ children }: { children: ReactNode }) {
     const trimmedId = id.trim()
     if (!trimmedId) return
     const now = new Date().toISOString()
+
     setAccountProfiles((prev) => {
       const existing = prev.find((p) => p.id === trimmedId)
+      let profile: AccountProfile
       if (existing) {
-        return prev.map((p) =>
-          p.id === trimmedId ? { ...p, label: label.trim() || trimmedId, type } : p
-        )
+        profile = { ...existing, label: label.trim() || trimmedId, type }
+      } else {
+        profile = { id: trimmedId, label: label.trim() || trimmedId, type, createdAt: now }
       }
-      return [...prev, { id: trimmedId, label: label.trim() || trimmedId, type, createdAt: now }]
+
+      if (cloudEnabled && userIdRef.current) {
+        cloudWrite(() => upsertProfile(userIdRef.current!, profile))
+      }
+
+      if (existing) {
+        return prev.map((p) => (p.id === trimmedId ? profile : p))
+      }
+      return [...prev, profile]
     })
     setSelectedAccountState(trimmedId)
-  }, [])
+  }, [cloudEnabled, cloudWrite])
 
   const updateAccount = useCallback((id: string, updates: { label?: string; type?: AccountType }) => {
     setAccountProfiles((prev) => {
       const existing = prev.find((p) => p.id === id)
+      let profile: AccountProfile
       if (existing) {
-        return prev.map((p) =>
-          p.id === id
-            ? {
-                ...p,
-                label: updates.label !== undefined ? updates.label.trim() || id : p.label,
-                type: updates.type ?? p.type,
-              }
-            : p
-        )
-      }
-      return [
-        ...prev,
-        {
+        profile = {
+          ...existing,
+          label: updates.label !== undefined ? updates.label.trim() || id : existing.label,
+          type: updates.type ?? existing.type,
+        }
+      } else {
+        profile = {
           id,
           label: updates.label?.trim() || id,
           type: updates.type ?? inferAccountType(trades.filter((t) => t.account === id)),
           createdAt: new Date().toISOString(),
-        },
-      ]
+        }
+      }
+
+      if (cloudEnabled && userIdRef.current) {
+        cloudWrite(() => upsertProfile(userIdRef.current!, profile))
+      }
+
+      if (existing) {
+        return prev.map((p) => (p.id === id ? profile : p))
+      }
+      return [...prev, profile]
     })
-  }, [trades])
+  }, [cloudEnabled, cloudWrite, trades])
 
   const deleteAccount = useCallback((id: string) => {
     setAccountProfiles((prev) => prev.filter((p) => p.id !== id))
     setTrades((prev) => prev.filter((t) => t.account !== id))
     setJournal((prev) => prev.filter((j) => j.account !== id))
     setSelectedAccountState((current) => (current === id ? 'all' : current))
-  }, [])
+
+    if (cloudEnabled && userIdRef.current) {
+      const uid = userIdRef.current
+      cloudWrite(async () => {
+        await deleteProfileCloud(uid, id)
+        await deleteTradesByAccount(uid, id)
+        await deleteJournalByAccount(uid, id)
+      })
+    }
+  }, [cloudEnabled, cloudWrite])
 
   const filteredTrades = useMemo(() => {
     if (selectedAccount === 'all') return trades
@@ -199,7 +341,11 @@ export function TradeStoreProvider({ children }: { children: ReactNode }) {
       updatedAt: now,
     }
     setTrades((prev) => [trade, ...prev])
-  }, [])
+
+    if (cloudEnabled && userIdRef.current) {
+      cloudWrite(() => upsertTrade(userIdRef.current!, trade))
+    }
+  }, [cloudEnabled, cloudWrite])
 
   const updateTrade = useCallback((id: string, updates: Partial<Trade>) => {
     setTrades((prev) =>
@@ -207,66 +353,113 @@ export function TradeStoreProvider({ children }: { children: ReactNode }) {
         if (t.id !== id) return t
         const merged = { ...t, ...updates, updatedAt: new Date().toISOString() }
         merged.pnl = computePnl(merged)
+
+        if (cloudEnabled && userIdRef.current) {
+          cloudWrite(() => upsertTrade(userIdRef.current!, merged))
+        }
+
         return merged
       })
     )
-  }, [])
+  }, [cloudEnabled, cloudWrite])
 
   const deleteTrade = useCallback((id: string) => {
     setTrades((prev) => prev.filter((t) => t.id !== id))
-  }, [])
+
+    if (cloudEnabled && userIdRef.current) {
+      cloudWrite(() => deleteTradeCloud(userIdRef.current!, id))
+    }
+  }, [cloudEnabled, cloudWrite])
 
   const importTrades = useCallback((newTrades: Trade[], options?: { replaceAccount?: string }) => {
     const accountId = options?.replaceAccount ?? newTrades[0]?.account
+    const isReplace = Boolean(options?.replaceAccount)
+
     if (accountId) {
       const accountTrades = newTrades.filter((t) => t.account === accountId)
       setAccountProfiles((prev) => {
         if (prev.some((p) => p.id === accountId)) return prev
         const type = inferAccountType(accountTrades)
-        return [
-          ...prev,
-          {
-            id: accountId,
-            label: accountId,
-            type,
-            createdAt: new Date().toISOString(),
-          },
-        ]
+        const profile: AccountProfile = {
+          id: accountId,
+          label: accountId,
+          type,
+          createdAt: new Date().toISOString(),
+        }
+
+        if (cloudEnabled && userIdRef.current) {
+          cloudWrite(() => upsertProfile(userIdRef.current!, profile))
+        }
+
+        return [...prev, profile]
       })
     }
 
+    let added = 0
+    let skipped = 0
+
     setTrades((prev) => {
-      const base = options?.replaceAccount
-        ? prev.filter((t) => t.account !== options.replaceAccount)
-        : prev
-      return [...newTrades, ...base]
+      if (isReplace && options?.replaceAccount) {
+        const base = prev.filter((t) => t.account !== options.replaceAccount)
+        added = newTrades.length
+        return [...newTrades, ...base]
+      }
+
+      const { merged, added: a, skipped: s } = mergeTrades(prev, newTrades)
+      added = a
+      skipped = s
+      return merged
     })
-  }, [])
+
+    if (cloudEnabled && userIdRef.current) {
+      const uid = userIdRef.current
+      cloudWrite(async () => {
+        if (isReplace && options?.replaceAccount) {
+          await deleteTradesByAccount(uid, options.replaceAccount)
+          await upsertTrades(uid, newTrades)
+        } else {
+          await upsertTrades(uid, newTrades)
+        }
+      })
+    }
+
+    return { added, skipped, replaced: isReplace }
+  }, [cloudEnabled, cloudWrite])
 
   const saveJournal = useCallback((input: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     const now = new Date().toISOString()
+    let savedEntry: JournalEntry | null = null
+
     setJournal((prev) => {
       const existing = input.id
         ? prev.find((j) => j.id === input.id)
         : prev.find((j) => j.date === input.date && j.account === input.account)
       if (existing) {
-        return prev.map((j) =>
-          j.id === existing.id ? { ...j, ...input, id: existing.id, updatedAt: now } : j
-        )
+        savedEntry = { ...existing, ...input, id: existing.id, updatedAt: now }
+        return prev.map((j) => (j.id === existing.id ? savedEntry! : j))
       }
-      const entry: JournalEntry = {
+      savedEntry = {
         ...input,
         id: uuidv4(),
         createdAt: now,
         updatedAt: now,
       }
-      return [entry, ...prev.filter((j) => !(j.date === input.date && j.account === input.account))]
+      return [savedEntry, ...prev.filter((j) => !(j.date === input.date && j.account === input.account))]
     })
-  }, [])
+
+    if (cloudEnabled && userIdRef.current && savedEntry) {
+      const entry = savedEntry
+      cloudWrite(() => upsertJournal(userIdRef.current!, entry))
+    }
+  }, [cloudEnabled, cloudWrite])
 
   const deleteJournal = useCallback((id: string) => {
     setJournal((prev) => prev.filter((j) => j.id !== id))
-  }, [])
+
+    if (cloudEnabled && userIdRef.current) {
+      cloudWrite(() => deleteJournalCloud(userIdRef.current!, id))
+    }
+  }, [cloudEnabled, cloudWrite])
 
   const getJournalByDate = useCallback(
     (date: string, account?: string) => {
@@ -278,6 +471,17 @@ export function TradeStoreProvider({ children }: { children: ReactNode }) {
     },
     [journal, selectedAccount]
   )
+
+  if (cloudEnabled && !cloudReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface-50">
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+          <p className="mt-4 text-sm text-slate-600">正在从云端同步数据…</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <TradeStoreContext.Provider
@@ -302,6 +506,8 @@ export function TradeStoreProvider({ children }: { children: ReactNode }) {
         deleteJournal,
         getJournalByDate,
         accounts,
+        syncStatus,
+        cloudEnabled,
       }}
     >
       {children}

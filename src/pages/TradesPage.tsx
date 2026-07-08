@@ -32,7 +32,7 @@ export function TradesPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Trades</h1>
+          <h1 className="page-title">Trades</h1>
           <p className="mt-1 text-sm text-slate-500">
             {filtered.length} 笔交易 · 筛选盈亏 <PnlBadge value={totalPnl} className="ml-1" />
           </p>

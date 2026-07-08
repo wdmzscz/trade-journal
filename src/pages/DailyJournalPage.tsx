@@ -79,8 +79,8 @@ export function DailyJournalPage() {
       <AccountScopeBanner />
 
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Daily Journal</h1>
-        <p className="mt-1 text-sm text-slate-500">记录每日交易计划、复盘与心得（按账户独立保存）</p>
+        <h1 className="page-title">Daily Journal</h1>
+        <p className="page-subtitle">记录每日交易计划、复盘与心得（按账户独立保存）</p>
       </div>
 
       {!canEditJournal && (
