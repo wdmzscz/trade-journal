@@ -47,7 +47,13 @@ export async function fetchIbkrFlexCsv(token: string, queryId: string): Promise<
       throw new Error(`IBKR GetStatement 失败：${parsed.ErrorMessage || body.slice(0, 300)}`)
     }
 
-    if (body.includes('Statement,Header') || body.includes('交易,Header') || body.includes('Trades,Header')) {
+    // Activity Statement 格式（含 section code）或 Flex Query 列式 CSV
+    if (
+      body.includes('Statement,Header') ||
+      body.includes('交易,Header') ||
+      body.includes('Trades,Header') ||
+      (body.includes('"ClientAccountID"') && body.includes('"Symbol"'))
+    ) {
       return body
     }
 

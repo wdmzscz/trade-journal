@@ -21,6 +21,11 @@
 6. 格式选 **CSV**
 7. 保存后记下 **Query ID**（一串数字）
 
+> **说明**：你截图里的自定义 Flex Query（勾选 Trades / NAV 等 section）可以直接用。
+> **Include section code and line descriptor** 设为 No 也没问题——系统已支持这种列式 CSV（与手动下载的活动账单格式不同）。
+> 同步后账户标签会显示为 **IBKR**，实际账户号为 IBKR 账户 ID（如 `U25840333`）。
+> 若需 Calendar 百分比准确，建议额外勾选 **Change in NAV** 和 **Deposits & Withdrawals**。
+
 ### 2. 开启 Flex Web Service 并获取 Token
 
 1. 在 Flex Queries 页面点击 **Flex Web Service Configuration**
@@ -71,3 +76,17 @@ supabase functions deploy sync-ibkr
 - **免费**：Flex API 不另外收费
 - **非实时推送**：是拉取报表；推荐 **每小时自动同步 + 手动立即同步**
 - **Token 安全**：只存 Supabase，不进前端或 GitHub
+
+---
+
+## 五、常见问题
+
+### `Edge Function returned a non-2xx status code`
+
+1. **Token 过期**：在 IBKR 重新 Generate Token，在 IBKR Sync 页保存后再试
+2. **未保存配置**：先填 Token + Query ID 并点保存，再点立即同步
+3. **Edge Function 未更新**：本地改过后需重新部署：
+   ```bash
+   supabase functions deploy sync-ibkr
+   ```
+4. 仍失败时，到 Supabase Dashboard → **Edge Functions** → **sync-ibkr** → **Logs** 查看具体报错

@@ -18,6 +18,7 @@ export function ImportCsvPage() {
   const [importResult, setImportResult] = useState<{ added: number; skipped: number; replaced: boolean } | null>(null)
   const [format, setFormat] = useState<CsvFormat | null>(null)
   const [detectedAccount, setDetectedAccount] = useState<string | null>(null)
+  const [detectedAccountLabel, setDetectedAccountLabel] = useState<string | null>(null)
   const [detectedFinancials, setDetectedFinancials] = useState<IbkrAccountFinancials | null>(null)
   /** merge=追加去重（默认）；replace=替换该账户全部记录 */
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
@@ -32,6 +33,7 @@ export function ImportCsvPage() {
     setErrors(result.errors)
     setFormat(result.format)
     setDetectedAccount(result.account ?? null)
+    setDetectedAccountLabel(result.accountLabel ?? null)
     setDetectedFinancials(result.accountFinancials ?? null)
     setImportResult(null)
   }, [])
@@ -53,6 +55,7 @@ export function ImportCsvPage() {
     const result = importTrades(preview, {
       replaceAccount: importMode === 'replace' && detectedAccount ? detectedAccount : undefined,
       accountFinancials: detectedFinancials ?? undefined,
+      accountLabel: detectedAccountLabel ?? undefined,
     })
     if (detectedAccount) {
       setSelectedAccount(detectedAccount)
@@ -61,6 +64,7 @@ export function ImportCsvPage() {
     setPreview([])
     setFormat(null)
     setDetectedAccount(null)
+    setDetectedAccountLabel(null)
     setDetectedFinancials(null)
   }
 

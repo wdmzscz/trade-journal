@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
@@ -37,6 +37,21 @@ export function CalendarPage() {
 
   const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const pnlMap = useMemo(() => new Map(dailyPnl.map((d) => [d.date, d])), [dailyPnl])
+
+  useEffect(() => {
+    if (filteredTrades.length === 0) return
+    const closed = filteredTrades.filter((t) => t.status === 'closed' && t.exitDate)
+    if (closed.length === 0) return
+
+    const latest = closed.reduce(
+      (max, t) => (t.exitDate! > max ? t.exitDate! : max),
+      closed[0].exitDate!
+    )
+    const d = new Date(latest)
+    if (Number.isNaN(d.getTime())) return
+    setSelectedYear(d.getFullYear())
+    setSelectedMonth(d.getMonth())
+  }, [selectedAccount, filteredTrades])
 
   const capitalContext = useMemo(() => {
     if (selectedAccount === 'all') {

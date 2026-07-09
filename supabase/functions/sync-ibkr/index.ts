@@ -59,6 +59,7 @@ async function upsertProfile(
   supabase: SupabaseClient,
   userId: string,
   accountId: string,
+  accountLabel: string,
   trades: ParsedTrade[],
   financials: ParsedFinancials | null
 ) {
@@ -71,11 +72,13 @@ async function upsertProfile(
 
   const accountTrades = trades.filter((t) => t.account === accountId)
   const now = new Date().toISOString()
+  const label =
+    existing?.label && existing.label !== accountId ? existing.label : accountLabel
 
   const profile = {
     user_id: userId,
     account_id: accountId,
-    label: existing?.label ?? accountId,
+    label,
     type: existing?.type ?? inferAccountType(accountTrades),
     created_at: existing?.created_at ?? now,
     starting_capital: financials?.startingCapital ?? existing?.starting_capital ?? null,
@@ -87,6 +90,37 @@ async function upsertProfile(
 
   const { error } = await supabase.from('account_profiles').upsert(profile)
   if (error) throw error
+}
+
+async function cleanupPlaceholderAccounts(
+  supabase: SupabaseClient,
+  userId: string,
+  realAccountId: string
+) {
+  const { data: profiles } = await supabase
+    .from('account_profiles')
+    .select('account_id')
+    .eq('user_id', userId)
+
+  for (const profile of profiles ?? []) {
+    const placeholderId = profile.account_id
+    if (!placeholderId || placeholderId === realAccountId) continue
+    if (placeholderId !== 'IBKR' && !placeholderId.startsWith('IBKR')) continue
+
+    const { count } = await supabase
+      .from('trades')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('account', placeholderId)
+
+    if ((count ?? 0) === 0) {
+      await supabase
+        .from('account_profiles')
+        .delete()
+        .eq('user_id', userId)
+        .eq('account_id', placeholderId)
+    }
+  }
 }
 
 async function syncUser(supabase: SupabaseClient, settings: SyncSettings) {
@@ -134,7 +168,15 @@ async function syncUser(supabase: SupabaseClient, settings: SyncSettings) {
     }
   }
 
-  await upsertProfile(supabase, settings.user_id, parsed.account, parsed.trades, parsed.financials)
+  await upsertProfile(
+    supabase,
+    settings.user_id,
+    parsed.account,
+    parsed.accountLabel,
+    parsed.trades,
+    parsed.financials
+  )
+  await cleanupPlaceholderAccounts(supabase, settings.user_id, parsed.account)
 
   const now = new Date().toISOString()
   await supabase
@@ -153,6 +195,7 @@ async function syncUser(supabase: SupabaseClient, settings: SyncSettings) {
     added,
     skipped,
     account: parsed.account,
+    accountLabel: parsed.accountLabel,
     tradeCount: parsed.trades.length,
     warnings: parsed.errors,
   }

@@ -13,7 +13,7 @@ import { useTradeStore } from '../hooks/useTradeStore'
 import { cn } from '../utils/cn'
 
 export function IbkrSyncPage() {
-  const { refreshFromCloud, cloudEnabled } = useTradeStore()
+  const { refreshFromCloud, cloudEnabled, setSelectedAccount } = useTradeStore()
   const [settings, setSettings] = useState<IbkrSyncSettings | null>(null)
   const [flexToken, setFlexToken] = useState('')
   const [flexQueryId, setFlexQueryId] = useState('')
@@ -74,11 +74,16 @@ export function IbkrSyncPage() {
     try {
       const result = await triggerIbkrSync()
       await refreshFromCloud?.()
+      if (result.account) {
+        setSelectedAccount(result.account)
+      }
       const updated = await fetchIbkrSyncSettings()
       setSettings(updated)
+      const warnText =
+        result.warnings && result.warnings.length > 0 ? ` · ${result.warnings.join('；')}` : ''
       setMessage({
-        type: 'ok',
-        text: `同步完成：新增 ${result.added} 笔，跳过重复 ${result.skipped} 笔（账户 ${result.account}）`,
+        type: result.added > 0 || (result.tradeCount ?? 0) > 0 ? 'ok' : 'err',
+        text: `同步完成：解析到 ${result.tradeCount ?? 0} 笔，新增 ${result.added} 笔，跳过重复 ${result.skipped} 笔（${result.accountLabel ?? 'IBKR'} · ${result.account}）${warnText}`,
       })
     } catch (err) {
       setMessage({ type: 'err', text: err instanceof Error ? err.message : '同步失败' })

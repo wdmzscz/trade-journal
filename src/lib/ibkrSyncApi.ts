@@ -21,6 +21,7 @@ export interface IbkrSyncResult {
   added: number
   skipped: number
   account: string
+  accountLabel?: string
   tradeCount: number
   warnings?: string[]
   error?: string
@@ -67,7 +68,18 @@ export async function triggerIbkrSync(): Promise<IbkrSyncResult> {
   const supabase = getSupabase()
   const { data, error } = await supabase.functions.invoke('sync-ibkr', { body: {} })
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    const fnError = error as { context?: { json?: () => Promise<{ error?: string }> }; message?: string }
+    if (fnError.context?.json) {
+      try {
+        const body = await fnError.context.json()
+        if (body?.error) throw new Error(body.error)
+      } catch (e) {
+        if (e instanceof Error && e.message !== error.message) throw e
+      }
+    }
+    throw new Error(error.message ?? '同步失败')
+  }
   if (data?.error) throw new Error(data.error)
   return data as IbkrSyncResult
 }

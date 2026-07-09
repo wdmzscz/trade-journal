@@ -11,6 +11,7 @@ export interface CsvParseResult {
   errors: string[]
   format: CsvFormat
   account?: string
+  accountLabel?: string
   accountFinancials?: IbkrAccountFinancials
 }
 
@@ -119,6 +120,7 @@ export function parseCsvText(text: string): CsvParseResult {
       errors: result.errors,
       format: 'ibkr',
       account: result.account,
+      accountLabel: result.accountLabel,
       accountFinancials: result.financials ?? undefined,
     }
   }

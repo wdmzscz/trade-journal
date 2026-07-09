@@ -60,6 +60,27 @@ function loadSelectedAccount(userId?: string): string {
   return localStorage.getItem(accountKey(userId)) ?? 'all'
 }
 
+function reconcileSelectedAccount(selected: string, trades: Trade[]): string {
+  if (selected === 'all') return 'all'
+  if (trades.some((t) => t.account === selected)) return selected
+
+  const counts = new Map<string, number>()
+  for (const trade of trades) {
+    counts.set(trade.account, (counts.get(trade.account) ?? 0) + 1)
+  }
+
+  let bestAccount = ''
+  let bestCount = 0
+  for (const [accountId, count] of counts) {
+    if (count > bestCount) {
+      bestAccount = accountId
+      bestCount = count
+    }
+  }
+
+  return bestCount > 0 ? bestAccount : 'all'
+}
+
 function inferAccountType(trades: Trade[]): AccountType {
   const futures = trades.filter((t) => t.assetClass === 'futures').length
   const stocks = trades.filter((t) => t.assetClass === 'stock').length
@@ -105,6 +126,7 @@ interface TradeStoreContextValue {
   importTrades: (trades: Trade[], options?: {
     replaceAccount?: string
     accountFinancials?: IbkrAccountFinancials
+    accountLabel?: string
   }) => { added: number; skipped: number; replaced: boolean }
   saveJournal: (entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void
   deleteJournal: (id: string) => void
@@ -149,6 +171,7 @@ export function TradeStoreProvider({
       setTrades(data.trades)
       setJournal(data.journal)
       setAccountProfiles(data.profiles)
+      setSelectedAccountState((current) => reconcileSelectedAccount(current, data.trades))
       setSyncStatus('idle')
     } catch {
       setSyncStatus('error')
@@ -183,6 +206,7 @@ export function TradeStoreProvider({
           setTrades(data.trades)
           setJournal(data.journal)
           setAccountProfiles(data.profiles)
+          setSelectedAccountState((current) => reconcileSelectedAccount(current, data.trades))
           setSyncStatus('idle')
           setCloudReady(true)
         }
@@ -338,7 +362,13 @@ export function TradeStoreProvider({
     const ids = new Set<string>()
     accountProfiles.forEach((p) => ids.add(p.id))
     trades.forEach((t) => ids.add(t.account))
-    return [...ids].sort()
+    const hasRealIbkrData = trades.some((t) => t.account !== 'IBKR')
+    return [...ids]
+      .filter((id) => {
+        if (id !== 'IBKR' || !hasRealIbkrData) return true
+        return trades.some((t) => t.account === 'IBKR')
+      })
+      .sort()
   }, [trades, accountProfiles])
 
   const accountInfos = useMemo((): AccountInfo[] => {
@@ -406,6 +436,7 @@ export function TradeStoreProvider({
   const importTrades = useCallback((newTrades: Trade[], options?: {
     replaceAccount?: string
     accountFinancials?: IbkrAccountFinancials
+    accountLabel?: string
   }) => {
     const accountId = options?.replaceAccount ?? newTrades[0]?.account
     const isReplace = Boolean(options?.replaceAccount)
@@ -415,11 +446,18 @@ export function TradeStoreProvider({
       setAccountProfiles((prev) => {
         const existing = prev.find((p) => p.id === accountId)
         const type = inferAccountType(accountTrades)
+        const label =
+          existing?.label && existing.label !== accountId
+            ? existing.label
+            : (options?.accountLabel ?? 'IBKR')
         let profile: AccountProfile = existing ?? {
           id: accountId,
-          label: accountId,
+          label,
           type,
           createdAt: new Date().toISOString(),
+        }
+        if (!existing) {
+          profile.label = label
         }
 
         if (options?.accountFinancials) {

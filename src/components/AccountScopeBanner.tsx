@@ -3,10 +3,19 @@ import { formatCurrency } from '../utils/stats'
 import { cn } from '../utils/cn'
 
 export function AccountScopeBanner({ className }: { className?: string }) {
-  const { selectedAccount, selectedAccountInfo, filteredTrades } = useTradeStore()
+  const {
+    selectedAccount,
+    selectedAccountInfo,
+    filteredTrades,
+    accountInfos,
+    setSelectedAccount,
+  } = useTradeStore()
 
   const closed = filteredTrades.filter((t) => t.status === 'closed')
   const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
+  const otherAccountsWithData = accountInfos.filter(
+    (a) => a.id !== selectedAccount && a.tradeCount > 0
+  )
 
   if (selectedAccount === 'all') {
     return (
@@ -30,8 +39,29 @@ export function AccountScopeBanner({ className }: { className?: string }) {
         <p className="text-sm text-amber-900">
           <span className="font-semibold">{label}</span>
           <span className="mx-2 text-amber-300">|</span>
-          该账户暂无交易数据，请前往 Import CSV 导入账单
+          该账户暂无交易数据
         </p>
+        {otherAccountsWithData.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedAccount('all')}
+              className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm hover:bg-brand-50"
+            >
+              查看全部账户（{accountInfos.reduce((s, a) => s + a.tradeCount, 0)} 笔）
+            </button>
+            {otherAccountsWithData.map((account) => (
+              <button
+                key={account.id}
+                type="button"
+                onClick={() => setSelectedAccount(account.id)}
+                className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                切换到 {account.label}（{account.tradeCount} 笔）
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     )
   }

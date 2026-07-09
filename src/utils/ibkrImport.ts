@@ -56,11 +56,174 @@ function parseNumber(value: string | undefined, fallback = 0): number {
 
 function parseIbkrDateTime(value: string): string {
   const cleaned = value.replace(/"/g, '').trim()
+  const semi = cleaned.match(/^(\d{4})(\d{2})(\d{2});(\d{2})(\d{2})(\d{2})$/)
+  if (semi) {
+    const [, y, mo, d, h, mi, s] = semi
+    return new Date(+y, +mo - 1, +d, +h, +mi, +s).toISOString()
+  }
   const d = new Date(cleaned)
   return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()
 }
 
+function isFlexQueryCsv(text: string): boolean {
+  if (text.includes('Statement,Header') || text.includes('交易,Header') || text.includes('Trades,Header')) {
+    return false
+  }
+  return text.includes('"ClientAccountID"') && text.includes('"Open/CloseIndicator"')
+}
+
+function extractFlexSection(text: string, marker: string): string {
+  const lines = text.split(/\r?\n/)
+  let headerIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes(marker) && lines[i].startsWith('"ClientAccountID"')) {
+      headerIdx = i
+      break
+    }
+  }
+  if (headerIdx < 0) return ''
+
+  const sectionLines = [lines[headerIdx]]
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line.trim()) continue
+    if (line.startsWith('"ClientAccountID"') && !line.includes(marker)) break
+    sectionLines.push(line)
+  }
+  return sectionLines.join('\n')
+}
+
+function extractFlexAccountInfo(text: string): { account: string; label: string } {
+  const lines = text.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (
+      !line.startsWith('"ClientAccountID"') ||
+      !line.includes('"Name"') ||
+      line.includes('"Open/CloseIndicator"')
+    ) {
+      continue
+    }
+    const parsed = Papa.parse<Record<string, string>>(lines.slice(i, i + 2).join('\n'), {
+      header: true,
+      skipEmptyLines: true,
+    })
+    const row = parsed.data[0]
+    if (!row) break
+    const account = row['ClientAccountID']?.trim()
+    if (!account) break
+    const alias = row['AccountAlias']?.trim()
+    return { account, label: alias || 'IBKR' }
+  }
+  return { account: 'IBKR', label: 'IBKR' }
+}
+
+function extractFlexOrders(text: string): { orders: IbkrOrder[]; account: string } {
+  const section = extractFlexSection(text, '"Open/CloseIndicator"')
+  if (!section) return { orders: [], account: 'IBKR' }
+
+  const parsed = Papa.parse<Record<string, string>>(section, { header: true, skipEmptyLines: true })
+  let account = 'IBKR'
+  const orders: IbkrOrder[] = []
+
+  for (const row of parsed.data) {
+    if (row['LevelOfDetail'] !== 'ORDER') continue
+    const code = row['Open/CloseIndicator']?.trim() as 'O' | 'C' | undefined
+    if (code !== 'O' && code !== 'C') continue
+    const symbol = row['Symbol']?.trim()
+    if (!symbol) continue
+
+    if (account === 'IBKR' && row['ClientAccountID']?.trim()) {
+      account = row['ClientAccountID'].trim()
+    }
+
+    orders.push({
+      symbol,
+      assetClass: row['AssetClass']?.trim() ?? '',
+      currency: row['CurrencyPrimary']?.trim() ?? 'USD',
+      datetime: row['DateTime']?.trim() || row['TradeDate']?.trim() || '',
+      quantity: parseNumber(row['Quantity']),
+      price: parseNumber(row['TradePrice']),
+      commission: parseNumber(row['IBCommission']),
+      realizedPnl: parseNumber(row['FifoPnlRealized']),
+      code,
+    })
+  }
+
+  orders.sort((a, b) => parseIbkrDateTime(a.datetime).localeCompare(parseIbkrDateTime(b.datetime)))
+  return { orders, account }
+}
+
+function extractFlexFinancials(text: string): IbkrAccountFinancials | null {
+  const lines = text.split(/\r?\n/)
+  let headerIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (
+      line.startsWith('"ClientAccountID"') &&
+      line.includes('"ReportDate"') &&
+      line.includes('"Total"') &&
+      line.includes('"Cash"')
+    ) {
+      headerIdx = i
+      break
+    }
+  }
+  if (headerIdx < 0) return null
+
+  const sectionLines = [lines[headerIdx]]
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line.trim()) continue
+    if (line.startsWith('"ClientAccountID"')) break
+    sectionLines.push(line)
+  }
+
+  const parsed = Papa.parse<Record<string, string>>(sectionLines.join('\n'), {
+    header: true,
+    skipEmptyLines: true,
+  })
+  const navRows = parsed.data
+    .filter((row) => row['ReportDate']?.trim())
+    .sort((a, b) => (a['ReportDate'] ?? '').localeCompare(b['ReportDate'] ?? ''))
+
+  if (navRows.length === 0) return null
+
+  const first = navRows.find((row) => parseNumber(row['Total']) > 0)
+  const last = [...navRows].reverse().find((row) => parseNumber(row['Total']) > 0)
+  if (!last) return null
+
+  return {
+    startingCapital: first ? parseNumber(first['Total']) : 0,
+    currentCapital: parseNumber(last['Total']),
+    totalDeposits: 0,
+    totalWithdrawals: 0,
+    cashFlows: [],
+  }
+}
+
+function parseFlexQueryStatement(text: string): {
+  trades: Trade[]
+  account: string
+  accountLabel: string
+  errors: string[]
+  financials: IbkrAccountFinancials | null
+} {
+  const accountInfo = extractFlexAccountInfo(text)
+  const { orders, account: accountFromTrades } = extractFlexOrders(text)
+  const account = accountFromTrades !== 'IBKR' ? accountFromTrades : accountInfo.account
+  const { trades, errors } = pairOrdersToTrades(orders, account)
+  const financials = extractFlexFinancials(text)
+
+  if (orders.length === 0) {
+    errors.push('未找到 IBKR 交易记录（Flex Query Trades 段）')
+  }
+
+  return { trades, account, accountLabel: accountInfo.label, errors, financials }
+}
+
 export function isIbkrStatement(text: string): boolean {
+  if (isFlexQueryCsv(text)) return true
   const head = text.slice(0, 2000)
   return (
     head.includes('Statement,Header') ||
@@ -194,10 +357,16 @@ function pairOrdersToTrades(orders: IbkrOrder[], account: string): { trades: Tra
 export function parseIbkrStatement(text: string): {
   trades: Trade[]
   account: string
+  accountLabel: string
   errors: string[]
   format: 'ibkr'
   financials: IbkrAccountFinancials | null
 } {
+  if (isFlexQueryCsv(text)) {
+    const result = parseFlexQueryStatement(text)
+    return { ...result, format: 'ibkr' }
+  }
+
   const parsed = Papa.parse<string[]>(text, {
     skipEmptyLines: true,
   })
@@ -212,7 +381,7 @@ export function parseIbkrStatement(text: string): {
     errors.push('未在文件中找到 IBKR 交易记录（交易 / Trades 部分）')
   }
 
-  return { trades, account, errors, format: 'ibkr', financials }
+  return { trades, account, accountLabel: 'IBKR', errors, format: 'ibkr', financials }
 }
 
 export function getIbkrSubtotals(text: string): Record<string, number> {
