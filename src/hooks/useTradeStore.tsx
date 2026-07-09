@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType } from '../types'
-import { calculateTradePnl } from '../utils/stats'
+import { calculateTradePnl, resolveStartingCapital } from '../utils/stats'
 import { mergeTrades } from '../utils/storage'
 import type { IbkrAccountFinancials } from '../utils/ibkrImport'
 import { isCloudEnabled } from '../lib/supabase'
@@ -90,13 +90,15 @@ function inferAccountType(trades: Trade[]): AccountType {
 }
 
 function applyFinancialsToProfile(profile: AccountProfile, financials: IbkrAccountFinancials): AccountProfile {
+  const parsedStarting = resolveStartingCapital(financials.startingCapital, financials.totalDeposits)
+  const startingCapital = Math.max(profile.startingCapital ?? 0, parsedStarting)
   return {
     ...profile,
-    startingCapital: financials.startingCapital,
-    currentCapital: financials.currentCapital,
-    totalDeposits: financials.totalDeposits,
+    startingCapital: startingCapital > 0 ? startingCapital : parsedStarting,
+    currentCapital: financials.currentCapital > 0 ? financials.currentCapital : profile.currentCapital,
+    totalDeposits: Math.max(profile.totalDeposits ?? 0, financials.totalDeposits),
     totalWithdrawals: financials.totalWithdrawals,
-    cashFlows: financials.cashFlows,
+    cashFlows: financials.cashFlows.length > 0 ? financials.cashFlows : profile.cashFlows,
   }
 }
 
@@ -376,13 +378,20 @@ export function TradeStoreProvider({
       const profile = accountProfiles.find((p) => p.id === id)
       const accountTrades = trades.filter((t) => t.account === id)
       const closed = accountTrades.filter((t) => t.status === 'closed')
+      const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
+      const startingCapital = resolveStartingCapital(
+        profile?.startingCapital ?? 0,
+        profile?.totalDeposits,
+        profile?.currentCapital,
+        totalPnl
+      )
       return {
         id,
         label: profile?.label ?? id,
         type: profile?.type ?? inferAccountType(accountTrades),
         tradeCount: accountTrades.length,
-        totalPnl: closed.reduce((sum, t) => sum + t.pnl, 0),
-        startingCapital: profile?.startingCapital,
+        totalPnl,
+        startingCapital: startingCapital > 0 ? startingCapital : profile?.startingCapital,
         currentCapital: profile?.currentCapital,
       }
     })

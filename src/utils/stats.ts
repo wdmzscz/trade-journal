@@ -39,6 +39,25 @@ export function computeAccountReturn(
   return currentCapital - startingCapital
 }
 
+/** 期初本金：优先账户设置，其次 IBKR 入金，最后才用净资产反推 */
+export function resolveStartingCapital(
+  startingCapital: number,
+  totalDeposits?: number | null,
+  currentCapital?: number | null,
+  totalTradePnl?: number | null
+): number {
+  if (startingCapital > 0) return startingCapital
+  if (totalDeposits != null && totalDeposits > 0) return totalDeposits
+  if (
+    currentCapital != null &&
+    totalTradePnl != null &&
+    currentCapital > totalTradePnl
+  ) {
+    return currentCapital - totalTradePnl
+  }
+  return 0
+}
+
 export function calculateTradePnl(
   side: 'long' | 'short',
   entryPrice: number,
@@ -154,16 +173,14 @@ export function computeDailyEquity(
   startingCapital: number,
   cashFlows: AccountCashFlow[],
   dailyPnl: DailyPnl[],
-  currentCapital?: number | null
+  currentCapital?: number | null,
+  totalDeposits?: number | null
 ): Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }> {
   const totalPnl = dailyPnl.reduce((sum, d) => sum + d.pnl, 0)
-  let equityBase = startingCapital
-  if (equityBase <= 0 && currentCapital != null && currentCapital > totalPnl) {
-    equityBase = currentCapital - totalPnl
-  }
+  const equityBase = resolveStartingCapital(startingCapital, totalDeposits, currentCapital, totalPnl)
   if (equityBase <= 0) return new Map()
 
-  let flows = startingCapital > 0 ? cashFlows : []
+  let flows = startingCapital > 0 || (totalDeposits != null && totalDeposits > 0) ? cashFlows : []
   if (currentCapital != null && currentCapital > 0 && flows.length > 0) {
     const { finalEquity } = simulateDailyEquity(equityBase, flows, dailyPnl)
     if (Math.abs(finalEquity - currentCapital) / currentCapital > 0.1) {

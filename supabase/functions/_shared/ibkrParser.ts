@@ -366,10 +366,13 @@ function extractFlexChangeInNav(text: string): ParsedFinancials | null {
           row['Deposits/Withdrawals']
       )
 
+      const totalDeposits = deposits > 0 ? deposits : 0
+      const startingCapital = starting > 0 ? starting : totalDeposits
+
       return {
-        startingCapital: starting,
+        startingCapital,
         currentCapital: ending,
-        totalDeposits: deposits > 0 ? deposits : 0,
+        totalDeposits,
         totalWithdrawals: deposits < 0 ? Math.abs(deposits) : 0,
         cashFlows: [],
       }

@@ -23,6 +23,7 @@ import {
   dayResultColor,
   formatCurrency,
   formatPercent,
+  resolveStartingCapital,
 } from '../utils/stats'
 import type { DayResult } from '../types'
 
@@ -54,20 +55,39 @@ export function CalendarPage() {
   }, [selectedAccount, filteredTrades])
 
   const capitalContext = useMemo(() => {
+    const totalTradePnl = dailyPnl.reduce((sum, d) => sum + d.pnl, 0)
     if (selectedAccount === 'all') {
+      const startingCapital = accountProfiles.reduce(
+        (sum, profile) =>
+          sum +
+          resolveStartingCapital(
+            profile.startingCapital ?? 0,
+            profile.totalDeposits,
+            profile.currentCapital,
+            totalTradePnl
+          ),
+        0
+      )
       return {
-        startingCapital: accountProfiles.reduce((s, p) => s + (p.startingCapital ?? 0), 0),
+        startingCapital,
         currentCapital: accountProfiles.reduce((s, p) => s + (p.currentCapital ?? 0), 0),
         cashFlows: accountProfiles.flatMap((p) => p.cashFlows ?? []),
+        totalDeposits: accountProfiles.reduce((s, p) => s + (p.totalDeposits ?? 0), 0),
       }
     }
     const profile = accountProfiles.find((p) => p.id === selectedAccount)
     return {
-      startingCapital: profile?.startingCapital ?? 0,
+      startingCapital: resolveStartingCapital(
+        profile?.startingCapital ?? 0,
+        profile?.totalDeposits,
+        profile?.currentCapital,
+        totalTradePnl
+      ),
       currentCapital: profile?.currentCapital,
       cashFlows: profile?.cashFlows ?? [],
+      totalDeposits: profile?.totalDeposits,
     }
-  }, [selectedAccount, accountProfiles])
+  }, [selectedAccount, accountProfiles, dailyPnl])
 
   const dailyEquityMap = useMemo(
     () =>
@@ -75,7 +95,8 @@ export function CalendarPage() {
         capitalContext.startingCapital,
         capitalContext.cashFlows,
         dailyPnl,
-        capitalContext.currentCapital
+        capitalContext.currentCapital,
+        capitalContext.totalDeposits
       ),
     [capitalContext, dailyPnl]
   )

@@ -175,7 +175,61 @@ function extractFlexOrders(text: string): { orders: IbkrOrder[]; account: string
   return { orders, account }
 }
 
+function extractFlexChangeInNav(text: string): IbkrAccountFinancials | null {
+  const lines = text.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (
+      !line.startsWith('"ClientAccountID"') ||
+      !(line.includes('"StartingValue"') || line.includes('"Starting Value"')) ||
+      !(line.includes('"EndingValue"') || line.includes('"Ending Value"'))
+    ) {
+      continue
+    }
+
+    const sectionLines = [lines[i]]
+    for (let j = i + 1; j < lines.length; j++) {
+      const next = lines[j]
+      if (!next.trim()) continue
+      if (next.startsWith('"ClientAccountID"')) break
+      sectionLines.push(next)
+    }
+
+    const parsed = Papa.parse<Record<string, string>>(sectionLines.join('\n'), {
+      header: true,
+      skipEmptyLines: true,
+    })
+
+    for (const row of parsed.data) {
+      const starting = parseNumber(row['StartingValue'] ?? row['Starting Value'])
+      const ending = parseNumber(row['EndingValue'] ?? row['Ending Value'])
+      if (starting <= 0 && ending <= 0) continue
+
+      const deposits = parseNumber(
+        row['DepositsWithdrawals'] ??
+          row['Deposits & Withdrawals'] ??
+          row['DepositsAndWithdrawals'] ??
+          row['Deposits/Withdrawals']
+      )
+      const totalDeposits = deposits > 0 ? deposits : 0
+      const startingCapital = starting > 0 ? starting : totalDeposits
+
+      return {
+        startingCapital,
+        currentCapital: ending,
+        totalDeposits,
+        totalWithdrawals: deposits < 0 ? Math.abs(deposits) : 0,
+        cashFlows: [],
+      }
+    }
+  }
+  return null
+}
+
 function extractFlexFinancials(text: string): IbkrAccountFinancials | null {
+  const changeInNav = extractFlexChangeInNav(text)
+  if (changeInNav) return changeInNav
+
   const lines = text.split(/\r?\n/)
   let headerIdx = -1
   for (let i = 0; i < lines.length; i++) {
@@ -492,6 +546,10 @@ function extractFinancials(rows: string[][]): IbkrAccountFinancials | null {
     if (netFlow != null && netFlow < 0) return Math.abs(netFlow)
     return cashFlows.filter((f) => f.amount < 0).reduce((s, f) => s + Math.abs(f.amount), 0)
   })()
+
+  if (startingCapital <= 0 && totalDeposits > 0) {
+    startingCapital = totalDeposits
+  }
 
   return {
     startingCapital,
