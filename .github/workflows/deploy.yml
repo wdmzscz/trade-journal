@@ -30,8 +30,8 @@ jobs:
       - name: Build
         env:
           GITHUB_ACTIONS: true
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || secrets.TRADE }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || secrets.IBKR_TRADE }}
         run: npm run build
 
       - name: SPA fallback for GitHub Pages
