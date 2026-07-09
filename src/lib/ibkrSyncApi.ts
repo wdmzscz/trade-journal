@@ -70,10 +70,14 @@ export async function triggerIbkrSync(): Promise<IbkrSyncResult> {
   const { data, error } = await supabase.functions.invoke('sync-ibkr', { body: {} })
 
   if (error) {
-    const fnError = error as { context?: { json?: () => Promise<{ error?: string }> }; message?: string }
-    if (fnError.context?.json) {
+    const fnError = error as {
+      context?: Response | { json?: () => Promise<{ error?: string }> }
+      message?: string
+    }
+    const response = fnError.context
+    if (response && typeof (response as Response).json === 'function') {
       try {
-        const body = await fnError.context.json()
+        const body = await (response as Response).clone().json() as { error?: string }
         if (body?.error) throw new Error(body.error)
       } catch (e) {
         if (e instanceof Error && e.message !== error.message) throw e

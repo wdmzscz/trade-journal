@@ -20,6 +20,21 @@ interface SyncSettings {
   last_sync_at: string | null
 }
 
+function formatSyncError(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (e && typeof e === 'object') {
+    const record = e as Record<string, unknown>
+    const message = typeof record.message === 'string' ? record.message : ''
+    const details = typeof record.details === 'string' ? record.details : ''
+    const hint = typeof record.hint === 'string' ? record.hint : ''
+    if (message && details) return `${message} (${details})`
+    if (message) return message
+    if (details) return details
+    if (hint) return hint
+  }
+  return '未知错误'
+}
+
 function inferAccountType(trades: ParsedTrade[]): string {
   const futures = trades.filter((t) => t.assetClass === 'futures').length
   const stocks = trades.filter((t) => t.assetClass === 'stock').length
@@ -249,7 +264,7 @@ Deno.serve(async (req) => {
           const result = await syncUser(admin, settings as SyncSettings)
           results.push({ user_id: settings.user_id, ok: true, ...result })
         } catch (e) {
-          const msg = e instanceof Error ? e.message : '同步失败'
+          const msg = formatSyncError(e)
           await admin
             .from('ibkr_sync_settings')
             .update({
@@ -301,13 +316,48 @@ Deno.serve(async (req) => {
       })
     }
 
-    const result = await syncUser(supabase, settings as SyncSettings)
+    if (!serviceRoleKey) {
+      return new Response(JSON.stringify({ error: '服务端未配置 SUPABASE_SERVICE_ROLE_KEY' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const admin = createClient(supabaseUrl, serviceRoleKey)
+    const result = await syncUser(admin, { ...(settings as SyncSettings), user_id: user.id })
 
     return new Response(JSON.stringify({ mode: 'manual', ...result }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (e) {
-    const message = e instanceof Error ? e.message : '未知错误'
+    const message = formatSyncError(e)
+
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+      const authHeader = req.headers.get('Authorization')
+      if (supabaseUrl && serviceRoleKey && authHeader) {
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+        const authClient = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: authHeader } },
+        })
+        const { data: { user } } = await authClient.auth.getUser()
+        if (user) {
+          const admin = createClient(supabaseUrl, serviceRoleKey)
+          await admin
+            .from('ibkr_sync_settings')
+            .update({
+              last_sync_status: 'error',
+              last_sync_message: message,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', user.id)
+        }
+      }
+    } catch {
+      // ignore secondary logging errors
+    }
+
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
