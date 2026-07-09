@@ -1,24 +1,32 @@
 import { useTradeStore } from '../hooks/useTradeStore'
-import { formatCurrency, computeAccountReturn } from '../utils/stats'
+import { formatCurrency, computeAccountReturn, resolveStartingCapital } from '../utils/stats'
 import { cn } from '../utils/cn'
 
 export function AccountScopeBanner({ className }: { className?: string }) {
-  const {
-    selectedAccount,
-    selectedAccountInfo,
-    filteredTrades,
-    accountInfos,
-    setSelectedAccount,
-  } = useTradeStore()
+  const { filteredTrades, selectedAccount, selectedAccountInfo, accountInfos, accountProfiles, setSelectedAccount } = useTradeStore()
 
   const closed = filteredTrades.filter((t) => t.status === 'closed')
   const tradePnl = closed.reduce((sum, t) => sum + t.pnl, 0)
   const accountReturn = selectedAccount === 'all'
     ? accountInfos
-        .map((a) => computeAccountReturn(a.startingCapital, a.currentCapital))
+        .map((a) => {
+          const profile = accountProfiles.find((p) => p.id === a.id)
+          return computeAccountReturn(
+            resolveStartingCapital(a.startingCapital ?? 0, profile?.totalDeposits),
+            a.currentCapital,
+            profile?.totalDeposits
+          )
+        })
         .filter((v): v is number => v != null)
         .reduce((s, v) => s + v, 0) || null
-    : computeAccountReturn(selectedAccountInfo?.startingCapital, selectedAccountInfo?.currentCapital)
+    : computeAccountReturn(
+        resolveStartingCapital(
+          selectedAccountInfo?.startingCapital ?? 0,
+          accountProfiles.find((p) => p.id === selectedAccount)?.totalDeposits
+        ),
+        selectedAccountInfo?.currentCapital,
+        accountProfiles.find((p) => p.id === selectedAccount)?.totalDeposits
+      )
   const otherAccountsWithData = accountInfos.filter(
     (a) => a.id !== selectedAccount && a.tradeCount > 0
   )

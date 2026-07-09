@@ -58,6 +58,7 @@ interface ProfileRow {
   total_deposits: number | null
   total_withdrawals: number | null
   cash_flows: AccountCashFlow[] | null
+  nav_history: { date: string; total: number }[] | null
 }
 
 function rowToTrade(row: TradeRow): Trade {
@@ -155,6 +156,7 @@ function rowToProfile(row: ProfileRow): AccountProfile {
     totalDeposits: row.total_deposits ?? undefined,
     totalWithdrawals: row.total_withdrawals ?? undefined,
     cashFlows: row.cash_flows ?? undefined,
+    navHistory: row.nav_history ?? undefined,
   }
 }
 
@@ -170,6 +172,7 @@ function profileToRow(profile: AccountProfile, userId: string): ProfileRow {
     total_deposits: profile.totalDeposits ?? null,
     total_withdrawals: profile.totalWithdrawals ?? null,
     cash_flows: profile.cashFlows ?? null,
+    nav_history: profile.navHistory ?? null,
   }
 }
 

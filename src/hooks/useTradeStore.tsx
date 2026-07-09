@@ -90,15 +90,14 @@ function inferAccountType(trades: Trade[]): AccountType {
 }
 
 function applyFinancialsToProfile(profile: AccountProfile, financials: IbkrAccountFinancials): AccountProfile {
-  const parsedStarting = resolveStartingCapital(financials.startingCapital, financials.totalDeposits)
-  const startingCapital = Math.max(profile.startingCapital ?? 0, parsedStarting)
   return {
     ...profile,
-    startingCapital: startingCapital > 0 ? startingCapital : parsedStarting,
-    currentCapital: financials.currentCapital > 0 ? financials.currentCapital : profile.currentCapital,
-    totalDeposits: Math.max(profile.totalDeposits ?? 0, financials.totalDeposits),
+    startingCapital: financials.startingCapital,
+    currentCapital: financials.currentCapital,
+    totalDeposits: financials.totalDeposits,
     totalWithdrawals: financials.totalWithdrawals,
-    cashFlows: financials.cashFlows.length > 0 ? financials.cashFlows : profile.cashFlows,
+    cashFlows: financials.cashFlows,
+    navHistory: financials.navHistory,
   }
 }
 
@@ -381,9 +380,7 @@ export function TradeStoreProvider({
       const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
       const startingCapital = resolveStartingCapital(
         profile?.startingCapital ?? 0,
-        profile?.totalDeposits,
-        profile?.currentCapital,
-        totalPnl
+        profile?.totalDeposits
       )
       return {
         id,
@@ -393,6 +390,7 @@ export function TradeStoreProvider({
         totalPnl,
         startingCapital: startingCapital > 0 ? startingCapital : profile?.startingCapital,
         currentCapital: profile?.currentCapital,
+        totalDeposits: profile?.totalDeposits,
       }
     })
   }, [accounts, accountProfiles, trades])

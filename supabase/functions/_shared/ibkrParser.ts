@@ -27,6 +27,7 @@ export interface ParsedFinancials {
   totalDeposits: number
   totalWithdrawals: number
   cashFlows: { date: string; amount: number; description?: string }[]
+  navHistory: { date: string; total: number }[]
 }
 
 export interface ParseResult {
@@ -237,7 +238,7 @@ function extractFinancials(rows: string[][]): ParsedFinancials | null {
       ? Math.abs(netFlow)
       : cashFlows.filter((f) => f.amount < 0).reduce((s, f) => s + Math.abs(f.amount), 0)
 
-  return { startingCapital, currentCapital, totalDeposits, totalWithdrawals, cashFlows }
+  return { startingCapital, currentCapital, totalDeposits, totalWithdrawals, cashFlows, navHistory: [] }
 }
 
 function extractFlexAccountInfo(text: string): { account: string; label: string } {
@@ -329,7 +330,109 @@ function extractFlexOrders(text: string): { orders: IbkrOrder[]; account: string
   return { orders, account }
 }
 
-function extractFlexChangeInNav(text: string): ParsedFinancials | null {
+function formatFlexReportDate(value: string): string {
+  const cleaned = value.replace(/"/g, '').trim()
+  if (/^\d{8}$/.test(cleaned)) {
+    return `${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`
+  }
+  return cleaned.slice(0, 10)
+}
+
+function sumPositiveCashFlows(cashFlows: ParsedFinancials['cashFlows']): number {
+  return cashFlows.filter((flow) => flow.amount > 0).reduce((sum, flow) => sum + flow.amount, 0)
+}
+
+function extractFlexDailyNav(text: string): ParsedFinancials['navHistory'] {
+  const lines = text.split(/\r?\n/)
+  let headerIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (
+      line.startsWith('"ClientAccountID"') &&
+      line.includes('"ReportDate"') &&
+      line.includes('"Total"') &&
+      line.includes('"Cash"')
+    ) {
+      headerIdx = i
+      break
+    }
+  }
+  if (headerIdx < 0) return []
+
+  const sectionLines = [lines[headerIdx]]
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line.trim()) continue
+    if (line.startsWith('"ClientAccountID"')) break
+    sectionLines.push(line)
+  }
+
+  const parsed = Papa.parse<Record<string, string>>(sectionLines.join('\n'), {
+    header: true,
+    skipEmptyLines: true,
+  })
+
+  return parsed.data
+    .map((row) => ({
+      date: formatFlexReportDate(row['ReportDate'] ?? ''),
+      total: parseNumber(row['Total']),
+    }))
+    .filter((row) => row.date && row.total > 0)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+function extractFlexDeposits(text: string): ParsedFinancials['cashFlows'] {
+  const lines = text.split(/\r?\n/)
+  const cashFlows: ParsedFinancials['cashFlows'] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line.startsWith('"ClientAccountID"')) continue
+    if (!line.includes('"Amount"')) continue
+    if (
+      line.includes('"Open/CloseIndicator"') ||
+      line.includes('"ReportDate"') ||
+      line.includes('"StartingValue"') ||
+      line.includes('"Starting Value"')
+    ) {
+      continue
+    }
+
+    const hasDate =
+      line.includes('"SettleDate"') ||
+      line.includes('"Settle Date"') ||
+      line.includes('"Date"')
+    if (!hasDate) continue
+
+    const sectionLines = [line]
+    for (let j = i + 1; j < lines.length; j++) {
+      const next = lines[j]
+      if (!next.trim()) continue
+      if (next.startsWith('"ClientAccountID"')) break
+      sectionLines.push(next)
+    }
+
+    const parsed = Papa.parse<Record<string, string>>(sectionLines.join('\n'), {
+      header: true,
+      skipEmptyLines: true,
+    })
+
+    for (const row of parsed.data) {
+      const date = formatFlexReportDate(
+        row['SettleDate'] ?? row['Settle Date'] ?? row['Date'] ?? ''
+      )
+      const amount = parseNumber(row['Amount'])
+      const description = row['Description']?.trim()
+      if (!date || amount === 0) continue
+      if (description && /total/i.test(description)) continue
+      cashFlows.push({ date, amount, description })
+    }
+  }
+
+  return cashFlows
+}
+
+function extractFlexChangeInNavSummary(text: string): Omit<ParsedFinancials, 'cashFlows' | 'navHistory'> | null {
   const lines = text.split(/\r?\n/)
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -367,72 +470,51 @@ function extractFlexChangeInNav(text: string): ParsedFinancials | null {
       )
 
       const totalDeposits = deposits > 0 ? deposits : 0
-      const startingCapital = starting > 0 ? starting : totalDeposits
 
       return {
-        startingCapital,
+        startingCapital: starting,
         currentCapital: ending,
         totalDeposits,
         totalWithdrawals: deposits < 0 ? Math.abs(deposits) : 0,
-        cashFlows: [],
       }
     }
   }
   return null
 }
 
-function extractFlexFinancials(text: string): ParsedFinancials | null {
-  const changeInNav = extractFlexChangeInNav(text)
-  if (changeInNav) return changeInNav
+function mergeFlexFinancials(text: string): ParsedFinancials | null {
+  const navHistory = extractFlexDailyNav(text)
+  const cashFlows = extractFlexDeposits(text)
+  const changeInNav = extractFlexChangeInNavSummary(text)
 
-  const lines = text.split(/\r?\n/)
-  let headerIdx = -1
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (
-      line.startsWith('"ClientAccountID"') &&
-      line.includes('"ReportDate"') &&
-      line.includes('"Total"') &&
-      line.includes('"Cash"')
-    ) {
-      headerIdx = i
-      break
-    }
-  }
-  if (headerIdx < 0) return null
+  if (navHistory.length === 0 && cashFlows.length === 0 && !changeInNav) return null
 
-  const sectionLines = [lines[headerIdx]]
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const line = lines[i]
-    if (!line.trim()) continue
-    if (line.startsWith('"ClientAccountID"')) break
-    sectionLines.push(line)
-  }
+  const flowDeposits = sumPositiveCashFlows(cashFlows)
+  const totalDeposits = Math.max(flowDeposits, changeInNav?.totalDeposits ?? 0)
+  const totalWithdrawals = Math.max(
+    cashFlows.filter((flow) => flow.amount < 0).reduce((sum, flow) => sum + Math.abs(flow.amount), 0),
+    changeInNav?.totalWithdrawals ?? 0
+  )
 
-  const parsed = Papa.parse<Record<string, string>>(sectionLines.join('\n'), {
-    header: true,
-    skipEmptyLines: true,
-  })
-  const navRows = parsed.data
-    .filter((row) => row['ReportDate']?.trim())
-    .sort((a, b) => (a['ReportDate'] ?? '').localeCompare(b['ReportDate'] ?? ''))
+  const currentCapital =
+    navHistory.length > 0
+      ? navHistory[navHistory.length - 1].total
+      : (changeInNav?.currentCapital ?? 0)
 
-  const nonZero = navRows.filter((row) => parseNumber(row['Total']) > 0)
-  if (nonZero.length < 3) return null
-
-  const first = nonZero[0]
-  const last = nonZero[nonZero.length - 1]
-
-  const startingCapital = first ? parseNumber(first['Total']) : 0
-  const currentCapital = parseNumber(last['Total'])
+  const startingCapital = changeInNav?.startingCapital ?? 0
 
   return {
     startingCapital,
     currentCapital,
-    totalDeposits: 0,
-    totalWithdrawals: 0,
-    cashFlows: [],
+    totalDeposits,
+    totalWithdrawals,
+    cashFlows,
+    navHistory,
   }
+}
+
+function extractFlexFinancials(text: string): ParsedFinancials | null {
+  return mergeFlexFinancials(text)
 }
 
 function parseFlexQueryCsv(text: string): ParseResult {

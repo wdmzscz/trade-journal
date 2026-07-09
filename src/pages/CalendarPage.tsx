@@ -55,39 +55,28 @@ export function CalendarPage() {
   }, [selectedAccount, filteredTrades])
 
   const capitalContext = useMemo(() => {
-    const totalTradePnl = dailyPnl.reduce((sum, d) => sum + d.pnl, 0)
     if (selectedAccount === 'all') {
-      const startingCapital = accountProfiles.reduce(
-        (sum, profile) =>
-          sum +
-          resolveStartingCapital(
-            profile.startingCapital ?? 0,
-            profile.totalDeposits,
-            profile.currentCapital,
-            totalTradePnl
-          ),
-        0
-      )
       return {
-        startingCapital,
+        startingCapital: accountProfiles.reduce(
+          (sum, profile) =>
+            sum + resolveStartingCapital(profile.startingCapital ?? 0, profile.totalDeposits),
+          0
+        ),
         currentCapital: accountProfiles.reduce((s, p) => s + (p.currentCapital ?? 0), 0),
-        cashFlows: accountProfiles.flatMap((p) => p.cashFlows ?? []),
         totalDeposits: accountProfiles.reduce((s, p) => s + (p.totalDeposits ?? 0), 0),
+        cashFlows: accountProfiles.flatMap((p) => p.cashFlows ?? []),
+        navHistory: accountProfiles.flatMap((p) => p.navHistory ?? []),
       }
     }
     const profile = accountProfiles.find((p) => p.id === selectedAccount)
     return {
-      startingCapital: resolveStartingCapital(
-        profile?.startingCapital ?? 0,
-        profile?.totalDeposits,
-        profile?.currentCapital,
-        totalTradePnl
-      ),
+      startingCapital: resolveStartingCapital(profile?.startingCapital ?? 0, profile?.totalDeposits),
       currentCapital: profile?.currentCapital,
-      cashFlows: profile?.cashFlows ?? [],
       totalDeposits: profile?.totalDeposits,
+      cashFlows: profile?.cashFlows ?? [],
+      navHistory: profile?.navHistory ?? [],
     }
-  }, [selectedAccount, accountProfiles, dailyPnl])
+  }, [selectedAccount, accountProfiles])
 
   const dailyEquityMap = useMemo(
     () =>
@@ -95,8 +84,7 @@ export function CalendarPage() {
         capitalContext.startingCapital,
         capitalContext.cashFlows,
         dailyPnl,
-        capitalContext.currentCapital,
-        capitalContext.totalDeposits
+        capitalContext.navHistory
       ),
     [capitalContext, dailyPnl]
   )
@@ -250,9 +238,14 @@ export function CalendarPage() {
             </button>
           </div>
           <div className="text-right">
-            {capitalContext.startingCapital > 0 && (
+            {capitalContext.totalDeposits != null && capitalContext.totalDeposits > 0 && (
               <p className="text-xs text-slate-500">
-                期初本金 <span className="font-semibold text-slate-700">{formatCurrency(capitalContext.startingCapital)}</span>
+                累计入金 <span className="font-semibold text-slate-700">{formatCurrency(capitalContext.totalDeposits)}</span>
+              </p>
+            )}
+            {capitalContext.startingCapital > 0 && capitalContext.startingCapital !== capitalContext.totalDeposits && (
+              <p className="text-xs text-slate-500">
+                期初净值 <span className="font-semibold text-slate-700">{formatCurrency(capitalContext.startingCapital)}</span>
               </p>
             )}
             {capitalContext.currentCapital != null && capitalContext.currentCapital > 0 && (

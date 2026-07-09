@@ -11,6 +11,11 @@ export interface AccountCashFlow {
   description?: string
 }
 
+export interface DailyNav {
+  date: string
+  total: number
+}
+
 export interface AccountProfile {
   id: string
   label: string
@@ -20,9 +25,12 @@ export interface AccountProfile {
   startingCapital?: number
   /** 当前/期末净值（IBKR：结束价值） */
   currentCapital?: number
+  /** 累计入金（IBKR 存款和取款合计） */
   totalDeposits?: number
   totalWithdrawals?: number
   cashFlows?: AccountCashFlow[]
+  /** IBKR 每日净资产（NAV in Base） */
+  navHistory?: DailyNav[]
 }
 
 export interface AccountInfo {
@@ -33,6 +41,7 @@ export interface AccountInfo {
   totalPnl: number
   startingCapital?: number
   currentCapital?: number
+  totalDeposits?: number
 }
 
 export interface Trade {

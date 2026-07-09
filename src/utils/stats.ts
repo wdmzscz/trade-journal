@@ -30,32 +30,30 @@ export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`
 }
 
-export function computeAccountReturn(
-  startingCapital?: number | null,
-  currentCapital?: number | null
-): number | null {
-  if (startingCapital == null || currentCapital == null) return null
-  if (startingCapital <= 0 || currentCapital <= 0) return null
-  return currentCapital - startingCapital
-}
-
-/** 期初本金：优先账户设置，其次 IBKR 入金，最后才用净资产反推 */
+/** 期初本金：来自 IBKR 期初净值；新账户期初为 0 时用累计入金 */
 export function resolveStartingCapital(
   startingCapital: number,
-  totalDeposits?: number | null,
-  currentCapital?: number | null,
-  totalTradePnl?: number | null
+  totalDeposits?: number | null
 ): number {
   if (startingCapital > 0) return startingCapital
   if (totalDeposits != null && totalDeposits > 0) return totalDeposits
-  if (
-    currentCapital != null &&
-    totalTradePnl != null &&
-    currentCapital > totalTradePnl
-  ) {
-    return currentCapital - totalTradePnl
-  }
   return 0
+}
+
+export function computeAccountReturn(
+  startingCapital?: number | null,
+  currentCapital?: number | null,
+  totalDeposits?: number | null
+): number | null {
+  if (currentCapital == null || currentCapital <= 0) return null
+  const basis =
+    startingCapital != null && startingCapital > 0
+      ? startingCapital
+      : totalDeposits != null && totalDeposits > 0
+        ? totalDeposits
+        : null
+  if (basis == null || basis <= 0) return null
+  return currentCapital - basis
 }
 
 export function calculateTradePnl(
@@ -168,27 +166,63 @@ function simulateDailyEquity(
   return { result, finalEquity: equity }
 }
 
-/** 每日盈亏占当日开盘前权益的百分比（期初本金 + 存取款 + 累计盈亏重建权益曲线） */
+function equityBeforeTradingDay(
+  date: string,
+  pnl: number,
+  navHistory: { date: string; total: number }[]
+): number {
+  let priorNav = 0
+  let sameDayNav = 0
+
+  for (const row of navHistory) {
+    if (row.date < date) priorNav = row.total
+    if (row.date === date) sameDayNav = row.total
+  }
+
+  if (priorNav > 0) return priorNav
+  if (sameDayNav > 0 && pnl !== 0) return sameDayNav - pnl
+  return 0
+}
+
+/** 用 IBKR 每日净资产作为开盘前权益，计算每日收益率 */
+export function computeDailyEquityFromNav(
+  navHistory: { date: string; total: number }[],
+  dailyPnl: DailyPnl[]
+): Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }> {
+  const sortedNav = [...navHistory]
+    .filter((row) => row.total > 0)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const result = new Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }>()
+
+  for (const day of dailyPnl) {
+    if (day.pnl === 0) continue
+    const equityStart = equityBeforeTradingDay(day.date, day.pnl, sortedNav)
+    if (equityStart <= 0) continue
+    result.set(day.date, {
+      pnlPercent: (day.pnl / equityStart) * 100,
+      equityStart,
+      equityEnd: equityStart + day.pnl,
+    })
+  }
+
+  return result
+}
+
+/** 每日盈亏占当日开盘前权益的百分比（优先 IBKR 每日 NAV，其次入金时间线） */
 export function computeDailyEquity(
   startingCapital: number,
   cashFlows: AccountCashFlow[],
   dailyPnl: DailyPnl[],
-  currentCapital?: number | null,
-  totalDeposits?: number | null
+  navHistory?: { date: string; total: number }[]
 ): Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }> {
-  const totalPnl = dailyPnl.reduce((sum, d) => sum + d.pnl, 0)
-  const equityBase = resolveStartingCapital(startingCapital, totalDeposits, currentCapital, totalPnl)
-  if (equityBase <= 0) return new Map()
-
-  let flows = startingCapital > 0 || (totalDeposits != null && totalDeposits > 0) ? cashFlows : []
-  if (currentCapital != null && currentCapital > 0 && flows.length > 0) {
-    const { finalEquity } = simulateDailyEquity(equityBase, flows, dailyPnl)
-    if (Math.abs(finalEquity - currentCapital) / currentCapital > 0.1) {
-      flows = []
-    }
+  if (navHistory && navHistory.length > 0) {
+    return computeDailyEquityFromNav(navHistory, dailyPnl)
   }
 
-  return simulateDailyEquity(equityBase, flows, dailyPnl).result
+  const equityBase = startingCapital > 0 ? startingCapital : 0
+  if (equityBase <= 0 && cashFlows.length === 0) return new Map()
+
+  return simulateDailyEquity(equityBase, cashFlows, dailyPnl).result
 }
 
 export function computeSymbolStats(trades: Trade[]): SymbolStats[] {

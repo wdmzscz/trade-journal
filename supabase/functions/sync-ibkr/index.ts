@@ -76,24 +76,13 @@ async function upsertProfile(
   const reliableFinancials =
     financials &&
     (
+      (financials.navHistory?.length ?? 0) > 0 ||
       (financials.cashFlows?.length ?? 0) > 0 ||
       (financials.totalDeposits ?? 0) > 0 ||
-      (financials.startingCapital > 0 && financials.currentCapital > 0)
+      (financials.currentCapital ?? 0) > 0
     )
       ? financials
       : null
-
-  const flexStarting =
-    financials && financials.startingCapital > 0
-      ? financials.startingCapital
-      : financials && financials.totalDeposits > 0
-        ? financials.totalDeposits
-        : 0
-  const resolvedStarting = Math.max(
-    flexStarting,
-    existing?.starting_capital ?? 0,
-    existing?.total_deposits ?? 0
-  )
 
   const profile = {
     user_id: userId,
@@ -101,22 +90,16 @@ async function upsertProfile(
     label,
     type: existing?.type ?? inferAccountType(accountTrades),
     created_at: existing?.created_at ?? now,
-    starting_capital: resolvedStarting > 0 ? resolvedStarting : null,
-    current_capital:
-      financials && financials.currentCapital > 0
-        ? financials.currentCapital
-        : (reliableFinancials?.currentCapital ?? existing?.current_capital ?? null),
-    total_deposits:
-      reliableFinancials?.totalDeposits ??
-      (financials && financials.totalDeposits > 0 ? financials.totalDeposits : null) ??
-      existing?.total_deposits ??
-      null,
+    starting_capital: reliableFinancials?.startingCapital ?? existing?.starting_capital ?? null,
+    current_capital: reliableFinancials?.currentCapital ?? existing?.current_capital ?? null,
+    total_deposits: reliableFinancials?.totalDeposits ?? existing?.total_deposits ?? null,
     total_withdrawals: reliableFinancials?.totalWithdrawals ?? existing?.total_withdrawals ?? null,
     cash_flows: reliableFinancials?.cashFlows?.length
       ? reliableFinancials.cashFlows
-      : (existing?.starting_capital && existing.starting_capital > 0 && existing?.cash_flows?.length
-          ? existing.cash_flows
-          : []),
+      : (existing?.cash_flows ?? []),
+    nav_history: reliableFinancials?.navHistory?.length
+      ? reliableFinancials.navHistory
+      : (existing?.nav_history ?? []),
   }
 
   const { error } = await supabase.from('account_profiles').upsert(profile)

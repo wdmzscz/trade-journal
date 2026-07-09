@@ -14,24 +14,37 @@ import {
   computeDashboardStats, computeDailyPnl, computeCumulativePnl,
   computeSymbolStats, computeSetupStats, computeWinLossDistribution,
   computeDayOfWeekStats, formatCurrency, formatPercent, computeAccountReturn,
+  resolveStartingCapital,
 } from '../utils/stats'
 
 export function DashboardPage() {
-  const { filteredTrades, selectedAccount, selectedAccountInfo, accountInfos } = useTradeStore()
+  const { filteredTrades, selectedAccount, selectedAccountInfo, accountInfos, accountProfiles } = useTradeStore()
 
   const stats = useMemo(() => computeDashboardStats(filteredTrades), [filteredTrades])
   const accountReturn = useMemo(() => {
     if (selectedAccount === 'all') {
       const returns = accountInfos
-        .map((a) => computeAccountReturn(a.startingCapital, a.currentCapital))
+        .map((a) => {
+          const profile = accountProfiles.find((p) => p.id === a.id)
+          return computeAccountReturn(
+            resolveStartingCapital(a.startingCapital ?? 0, profile?.totalDeposits),
+            a.currentCapital,
+            profile?.totalDeposits
+          )
+        })
         .filter((v): v is number => v != null)
       return returns.length > 0 ? returns.reduce((s, v) => s + v, 0) : null
     }
+    const profile = accountProfiles.find((p) => p.id === selectedAccount)
     return computeAccountReturn(
-      selectedAccountInfo?.startingCapital,
-      selectedAccountInfo?.currentCapital
+      resolveStartingCapital(
+        selectedAccountInfo?.startingCapital ?? 0,
+        profile?.totalDeposits
+      ),
+      selectedAccountInfo?.currentCapital,
+      profile?.totalDeposits
     )
-  }, [selectedAccount, selectedAccountInfo, accountInfos])
+  }, [selectedAccount, selectedAccountInfo, accountInfos, accountProfiles])
   const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const cumulativePnl = useMemo(() => computeCumulativePnl(dailyPnl), [dailyPnl])
   const symbolStats = useMemo(() => computeSymbolStats(filteredTrades).slice(0, 8), [filteredTrades])

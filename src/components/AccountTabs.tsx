@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { cn } from '../utils/cn'
-import { formatCurrency, computeAccountReturn } from '../utils/stats'
+import { formatCurrency, computeAccountReturn, resolveStartingCapital } from '../utils/stats'
 import type { AccountInfo, AccountType } from '../types'
 
 const TYPE_META: Record<AccountType, { icon: typeof TrendingUp; badge: string; color: string }> = {
@@ -129,8 +129,8 @@ export function AccountTabs() {
                 badgeColor={meta.color}
                 trailing={
                   account.tradeCount > 0 ? (
-                    <span className={cn('text-[10px] font-semibold', (computeAccountReturn(account.startingCapital, account.currentCapital) ?? account.totalPnl) >= 0 ? 'text-emerald-600' : 'text-red-500')}>
-                      {formatCurrency(computeAccountReturn(account.startingCapital, account.currentCapital) ?? account.totalPnl)}
+                    <span className={cn('text-[10px] font-semibold', (computeAccountReturn(resolveStartingCapital(account.startingCapital ?? 0, account.totalDeposits), account.currentCapital, account.totalDeposits) ?? account.totalPnl) >= 0 ? 'text-emerald-600' : 'text-red-500')}>
+                      {formatCurrency(computeAccountReturn(resolveStartingCapital(account.startingCapital ?? 0, account.totalDeposits), account.currentCapital, account.totalDeposits) ?? account.totalPnl)}
                     </span>
                   ) : (
                     <span className="text-[10px] text-slate-400">无数据</span>

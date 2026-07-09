@@ -24,7 +24,10 @@
 > **说明**：你截图里的自定义 Flex Query（勾选 Trades / NAV 等 section）可以直接用。
 > **Include section code and line descriptor** 设为 No 也没问题——系统已支持这种列式 CSV（与手动下载的活动账单格式不同）。
 > 同步后账户标签会显示为 **IBKR**，实际账户号为 IBKR 账户 ID（如 `U25840333`）。
-> 若需 Calendar 百分比准确，建议额外勾选 **Change in NAV** 和 **Deposits & Withdrawals**。
+> **本金与 Calendar 百分比**：全部来自 IBKR 同步，无需手动填写。
+> - **NAV in Base**（每日净资产）→ 计算每日收益率分母（最准确）
+> - **Deposits & Withdrawals**（带结算日期）→ 累计入金 $10,000 等（含多笔入金，如 6/24 与 7/8 各 $5,000）
+> - **Change in NAV** → 期初/期末净值与期间入金汇总
 
 ### 2. 开启 Flex Web Service 并获取 Token
 

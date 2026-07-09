@@ -13,6 +13,7 @@ create table if not exists account_profiles (
   total_deposits numeric,
   total_withdrawals numeric,
   cash_flows jsonb default '[]',
+  nav_history jsonb default '[]',
   primary key (user_id, account_id)
 );
 
@@ -94,6 +95,7 @@ alter table account_profiles add column if not exists current_capital numeric;
 alter table account_profiles add column if not exists total_deposits numeric;
 alter table account_profiles add column if not exists total_withdrawals numeric;
 alter table account_profiles add column if not exists cash_flows jsonb default '[]';
+alter table account_profiles add column if not exists nav_history jsonb default '[]';
 
 -- IBKR Flex 自动同步配置（Token 仅存云端，RLS 保护）
 create table if not exists ibkr_sync_settings (
