@@ -61,15 +61,36 @@ function parseNumber(value: string | undefined, fallback = 0): number {
   return Number.isNaN(n) ? fallback : n
 }
 
+function toLocalIso(y: number, mo: number, d: number, h: number, mi: number, s: number): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${y}-${pad(mo)}-${pad(d)}T${pad(h)}:${pad(mi)}:${pad(s)}.000`
+}
+
 function parseIbkrDateTime(value: string): string {
   const cleaned = value.replace(/"/g, '').trim()
   const semi = cleaned.match(/^(\d{4})(\d{2})(\d{2});(\d{2})(\d{2})(\d{2})$/)
   if (semi) {
     const [, y, mo, d, h, mi, s] = semi
-    return new Date(+y, +mo - 1, +d, +h, +mi, +s).toISOString()
+    return toLocalIso(+y, +mo, +d, +h, +mi, +s)
   }
-  const d = new Date(cleaned)
-  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()
+  const comma = cleaned.match(/^(\d{4})-(\d{2})-(\d{2}),?\s*(\d{2}):(\d{2}):(\d{2})/)
+  if (comma) {
+    const [, y, mo, d, h, mi, s] = comma
+    return toLocalIso(+y, +mo, +d, +h, +mi, +s)
+  }
+  const dt = new Date(cleaned)
+  if (!Number.isNaN(dt.getTime())) {
+    return toLocalIso(
+      dt.getFullYear(),
+      dt.getMonth() + 1,
+      dt.getDate(),
+      dt.getHours(),
+      dt.getMinutes(),
+      dt.getSeconds()
+    )
+  }
+  const now = new Date()
+  return toLocalIso(now.getFullYear(), now.getMonth() + 1, now.getDate(), 0, 0, 0)
 }
 
 function normalizeAssetClass(value: string): string {

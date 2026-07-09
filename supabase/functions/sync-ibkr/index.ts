@@ -73,17 +73,25 @@ async function upsertProfile(
   const label =
     existing?.label && existing.label !== accountId ? existing.label : accountLabel
 
+  const reliableFinancials =
+    financials &&
+    ((financials.cashFlows?.length ?? 0) > 0 || (financials.totalDeposits ?? 0) > 0)
+      ? financials
+      : null
+
   const profile = {
     user_id: userId,
     account_id: accountId,
     label,
     type: existing?.type ?? inferAccountType(accountTrades),
     created_at: existing?.created_at ?? now,
-    starting_capital: financials?.startingCapital ?? existing?.starting_capital ?? null,
-    current_capital: financials?.currentCapital ?? existing?.current_capital ?? null,
-    total_deposits: financials?.totalDeposits ?? existing?.total_deposits ?? null,
-    total_withdrawals: financials?.totalWithdrawals ?? existing?.total_withdrawals ?? null,
-    cash_flows: financials?.cashFlows ?? existing?.cash_flows ?? [],
+    starting_capital: reliableFinancials?.startingCapital ?? existing?.starting_capital ?? null,
+    current_capital: reliableFinancials?.currentCapital ?? existing?.current_capital ?? null,
+    total_deposits: reliableFinancials?.totalDeposits ?? existing?.total_deposits ?? null,
+    total_withdrawals: reliableFinancials?.totalWithdrawals ?? existing?.total_withdrawals ?? null,
+    cash_flows: reliableFinancials?.cashFlows?.length
+      ? reliableFinancials.cashFlows
+      : (existing?.cash_flows ?? []),
   }
 
   const { error } = await supabase.from('account_profiles').upsert(profile)
