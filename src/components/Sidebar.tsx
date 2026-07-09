@@ -8,6 +8,7 @@ import {
   TrendingUp,
   CalendarDays,
   LogOut,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { StorageInfo } from './StorageInfo'
@@ -21,6 +22,7 @@ const navItems = [
   { to: '/journal', label: 'Daily Journal', icon: BookOpen },
   { to: '/add-trade', label: 'Add Trade', icon: PlusCircle },
   { to: '/import', label: 'Import CSV', icon: Upload },
+  { to: '/ibkr-sync', label: 'IBKR Sync', icon: RefreshCw },
 ]
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

@@ -112,6 +112,7 @@ interface TradeStoreContextValue {
   accounts: string[]
   syncStatus: SyncStatus
   cloudEnabled: boolean
+  refreshFromCloud?: () => Promise<void>
 }
 
 const TradeStoreContext = createContext<TradeStoreContextValue | null>(null)
@@ -549,6 +550,7 @@ export function TradeStoreProvider({
         accounts,
         syncStatus,
         cloudEnabled,
+        refreshFromCloud: cloudEnabled ? refetchFromCloud : undefined,
       }}
     >
       {children}

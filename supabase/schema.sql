@@ -94,3 +94,25 @@ alter table account_profiles add column if not exists current_capital numeric;
 alter table account_profiles add column if not exists total_deposits numeric;
 alter table account_profiles add column if not exists total_withdrawals numeric;
 alter table account_profiles add column if not exists cash_flows jsonb default '[]';
+
+-- IBKR Flex 自动同步配置（Token 仅存云端，RLS 保护）
+create table if not exists ibkr_sync_settings (
+  user_id uuid primary key references auth.users on delete cascade,
+  flex_token text not null default '',
+  flex_query_id text not null default '',
+  auto_sync_enabled boolean not null default false,
+  auto_sync_interval text not null default 'daily' check (auto_sync_interval in ('manual', 'hourly', 'daily')),
+  last_sync_at timestamptz,
+  last_sync_status text,
+  last_sync_message text,
+  last_sync_added int default 0,
+  last_sync_skipped int default 0,
+  updated_at timestamptz not null default now()
+);
+
+alter table ibkr_sync_settings enable row level security;
+
+create policy "Users manage own ibkr_sync_settings"
+  on ibkr_sync_settings for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

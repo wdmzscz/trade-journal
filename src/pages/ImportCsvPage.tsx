@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
-import { Upload, Download, FileText, CheckCircle, AlertCircle } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Upload, Download, FileText, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { parseCsvFile, downloadCsvTemplate } from '../utils/csvImport'
 import type { Trade } from '../types'
@@ -68,11 +69,20 @@ export function ImportCsvPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 sm:space-y-6">
-      <div>
-        <h1 className="page-title">Import CSV</h1>
-        <p className="page-subtitle">
-          支持 TradeZella 通用格式，以及 Interactive Brokers (IBKR) 活动账单
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="page-title">Import CSV</h1>
+          <p className="page-subtitle">
+            支持 TradeZella 通用格式，以及 Interactive Brokers (IBKR) 活动账单
+          </p>
+        </div>
+        <Link
+          to="/ibkr-sync"
+          className="inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100"
+        >
+          <RefreshCw className="h-4 w-4" />
+          IBKR 自动同步
+        </Link>
       </div>
 
       <StorageInfo className="rounded-xl border border-surface-200 bg-white p-4 shadow-sm" />

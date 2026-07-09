@@ -1,0 +1,23 @@
+name: IBKR Daily Sync
+
+on:
+  schedule:
+    # UTC 22:00 ≈ 美东 18:00（夏令时）收盘后
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Supabase Edge Function
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Skip: VITE_SUPABASE_URL or CRON_SECRET not configured"
+            exit 0
+          fi
+          curl -sf -X POST "${SUPABASE_URL}/functions/v1/sync-ibkr?interval=daily" \
+            -H "x-cron-secret: ${CRON_SECRET}"
