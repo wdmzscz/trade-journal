@@ -70,7 +70,13 @@ export function CalendarPage() {
   }, [selectedAccount, accountProfiles])
 
   const dailyEquityMap = useMemo(
-    () => computeDailyEquity(capitalContext.startingCapital, capitalContext.cashFlows, dailyPnl),
+    () =>
+      computeDailyEquity(
+        capitalContext.startingCapital,
+        capitalContext.cashFlows,
+        dailyPnl,
+        capitalContext.currentCapital
+      ),
     [capitalContext, dailyPnl]
   )
   const journalDates = useMemo(() => new Set(filteredJournal.map((j) => j.date)), [filteredJournal])
@@ -223,9 +229,14 @@ export function CalendarPage() {
             </button>
           </div>
           <div className="text-right">
+            {capitalContext.startingCapital > 0 && (
+              <p className="text-xs text-slate-500">
+                期初本金 <span className="font-semibold text-slate-700">{formatCurrency(capitalContext.startingCapital)}</span>
+              </p>
+            )}
             {capitalContext.currentCapital != null && capitalContext.currentCapital > 0 && (
               <p className="text-xs text-slate-500">
-                本金（净资产） <span className="font-semibold text-slate-700">{formatCurrency(capitalContext.currentCapital)}</span>
+                当前净资产 <span className="font-semibold text-slate-700">{formatCurrency(capitalContext.currentCapital)}</span>
               </p>
             )}
             <p className="text-xs text-slate-500">月度总盈亏</p>

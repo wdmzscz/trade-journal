@@ -111,12 +111,11 @@ export function computeCumulativePnl(daily: DailyPnl[]): { date: string; cumulat
   })
 }
 
-/** 每日盈亏占当日开盘前本金的百分比（基于 IBKR 净值 + 存取款重建权益曲线） */
-export function computeDailyEquity(
-  startingCapital: number,
+function simulateDailyEquity(
+  equityBase: number,
   cashFlows: AccountCashFlow[],
   dailyPnl: DailyPnl[]
-): Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }> {
+): { result: Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }>; finalEquity: number } {
   const pnlByDate = new Map(dailyPnl.map((d) => [d.date, d.pnl]))
   const flowsByDate = new Map<string, number>()
   for (const cf of cashFlows) {
@@ -128,7 +127,7 @@ export function computeDailyEquity(
   dailyPnl.forEach((d) => allDates.add(d.date))
 
   const sortedDates = [...allDates].sort()
-  let equity = startingCapital
+  let equity = equityBase
   const result = new Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }>()
 
   for (const date of sortedDates) {
@@ -147,7 +146,32 @@ export function computeDailyEquity(
     equity = equityAfterFlow + pnl
   }
 
-  return result
+  return { result, finalEquity: equity }
+}
+
+/** 每日盈亏占当日开盘前权益的百分比（期初本金 + 存取款 + 累计盈亏重建权益曲线） */
+export function computeDailyEquity(
+  startingCapital: number,
+  cashFlows: AccountCashFlow[],
+  dailyPnl: DailyPnl[],
+  currentCapital?: number | null
+): Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }> {
+  const totalPnl = dailyPnl.reduce((sum, d) => sum + d.pnl, 0)
+  let equityBase = startingCapital
+  if (equityBase <= 0 && currentCapital != null && currentCapital > totalPnl) {
+    equityBase = currentCapital - totalPnl
+  }
+  if (equityBase <= 0) return new Map()
+
+  let flows = startingCapital > 0 ? cashFlows : []
+  if (currentCapital != null && currentCapital > 0 && flows.length > 0) {
+    const { finalEquity } = simulateDailyEquity(equityBase, flows, dailyPnl)
+    if (Math.abs(finalEquity - currentCapital) / currentCapital > 0.1) {
+      flows = []
+    }
+  }
+
+  return simulateDailyEquity(equityBase, flows, dailyPnl).result
 }
 
 export function computeSymbolStats(trades: Trade[]): SymbolStats[] {

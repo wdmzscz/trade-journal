@@ -91,7 +91,9 @@ async function upsertProfile(
     total_withdrawals: reliableFinancials?.totalWithdrawals ?? existing?.total_withdrawals ?? null,
     cash_flows: reliableFinancials?.cashFlows?.length
       ? reliableFinancials.cashFlows
-      : (existing?.cash_flows ?? []),
+      : (existing?.starting_capital && existing.starting_capital > 0 && existing?.cash_flows?.length
+          ? existing.cash_flows
+          : []),
   }
 
   const { error } = await supabase.from('account_profiles').upsert(profile)
