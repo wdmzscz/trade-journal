@@ -70,9 +70,19 @@ export function IbkrSyncPage() {
   }
 
   async function handleSyncNow() {
+    if (!flexToken.trim() || !flexQueryId.trim()) {
+      setMessage({ type: 'err', text: '请填写 Flex Token 和 Query ID' })
+      return
+    }
     setSyncing(true)
     setMessage(null)
     try {
+      await saveIbkrSyncSettings({
+        flex_token: flexToken,
+        flex_query_id: flexQueryId,
+        auto_sync_enabled: autoSync,
+        auto_sync_interval: syncInterval,
+      })
       const result = await triggerIbkrSync()
       await refreshFromCloud?.()
       if (result.account) {
@@ -172,6 +182,9 @@ export function IbkrSyncPage() {
             placeholder="在 IBKR Client Portal 生成"
             className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
+          <p className="mt-1 text-xs text-slate-500">
+            在 IBKR 生成新 Token 后粘贴到此处；点「立即同步」会先保存再请求 IBKR。
+          </p>
         </div>
 
         <div>
