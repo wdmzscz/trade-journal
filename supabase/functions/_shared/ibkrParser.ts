@@ -381,6 +381,23 @@ function extractFlexDailyNav(text: string): ParsedFinancials['navHistory'] {
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
+function formatFlexCashDate(value: string): string {
+  const cleaned = value.replace(/"/g, '').trim()
+  const semi = cleaned.match(/^(\d{4})(\d{2})(\d{2})/)
+  if (semi) return `${semi[1]}-${semi[2]}-${semi[3]}`
+  return cleaned.slice(0, 10)
+}
+
+function isPrincipalCashFlow(type: string, description: string): boolean {
+  const haystack = `${type} ${description}`.toLowerCase()
+  if (
+    /dividend|interest|commission|fee|withholding|tax|coupon|accrual/.test(haystack)
+  ) {
+    return false
+  }
+  return /deposit|withdraw|transfer|电子资金|存款|取款|入金|出金/.test(haystack)
+}
+
 function extractFlexDeposits(text: string): ParsedFinancials['cashFlows'] {
   const lines = text.split(/\r?\n/)
   const cashFlows: ParsedFinancials['cashFlows'] = []
@@ -398,11 +415,13 @@ function extractFlexDeposits(text: string): ParsedFinancials['cashFlows'] {
       continue
     }
 
-    const hasDate =
+    const isCashTransactions =
+      line.includes('"Date/Time"') || line.includes('"DateTime"')
+    const hasSettleDate =
       line.includes('"SettleDate"') ||
       line.includes('"Settle Date"') ||
       line.includes('"Date"')
-    if (!hasDate) continue
+    if (!isCashTransactions && !hasSettleDate) continue
 
     const sectionLines = [line]
     for (let j = i + 1; j < lines.length; j++) {
@@ -418,14 +437,21 @@ function extractFlexDeposits(text: string): ParsedFinancials['cashFlows'] {
     })
 
     for (const row of parsed.data) {
-      const date = formatFlexReportDate(
-        row['SettleDate'] ?? row['Settle Date'] ?? row['Date'] ?? ''
+      const date = formatFlexCashDate(
+        row['SettleDate'] ??
+          row['Settle Date'] ??
+          row['Date/Time'] ??
+          row['DateTime'] ??
+          row['Date'] ??
+          ''
       )
       const amount = parseNumber(row['Amount'])
       const description = row['Description']?.trim()
+      const type = row['Type']?.trim() ?? ''
       if (!date || amount === 0) continue
       if (description && /total/i.test(description)) continue
-      cashFlows.push({ date, amount, description })
+      if (isCashTransactions && !isPrincipalCashFlow(type, description ?? '')) continue
+      cashFlows.push({ date, amount, description: description || type || undefined })
     }
   }
 

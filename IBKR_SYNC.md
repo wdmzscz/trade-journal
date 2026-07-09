@@ -15,7 +15,8 @@
    - **Account Information**（账户信息）
    - **Net Asset Value**（净资产值）
    - **Change in NAV**（净资产值变更）
-   - **Deposits & Withdrawals**（存款和取款）
+   - **Deposits & Withdrawals**（存款和取款）— 部分账户界面无此项
+   - **Cash Transactions**（现金交易）— **入金/出金用这个**（IBKR 官方等同来源）
    - **Trades**（交易）
 5. 日期范围选 **Last 365 Calendar Days**
 6. 格式选 **CSV**
@@ -26,8 +27,10 @@
 > 同步后账户标签会显示为 **IBKR**，实际账户号为 IBKR 账户 ID（如 `U25840333`）。
 > **本金与 Calendar 百分比**：全部来自 IBKR 同步，无需手动填写。
 > - **NAV in Base**（每日净资产）→ 计算每日收益率分母（最准确）
-> - **Deposits & Withdrawals**（带结算日期）→ 累计入金 $10,000 等（含多笔入金，如 6/24 与 7/8 各 $5,000）
+> - **Cash Transactions**（现金交易）→ 每笔入金/出金日期与金额（含 6/24、7/8 各 $5,000）
 > - **Change in NAV** → 期初/期末净值与期间入金汇总
+>
+> 若列表里没有 “Deposits & Withdrawals”，勾选 **Cash Transactions** 即可（IBKR 文档：该段包含 deposits and withdrawals）。
 
 ### 2. 开启 Flex Web Service 并获取 Token
 
