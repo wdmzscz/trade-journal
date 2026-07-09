@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { cn } from '../utils/cn'
-import { formatCurrency } from '../utils/stats'
+import { formatCurrency, computeAccountReturn } from '../utils/stats'
 import type { AccountInfo, AccountType } from '../types'
 
 const TYPE_META: Record<AccountType, { icon: typeof TrendingUp; badge: string; color: string }> = {
@@ -28,6 +28,8 @@ export function AccountTabs() {
   const [formId, setFormId] = useState('')
   const [formLabel, setFormLabel] = useState('')
   const [formType, setFormType] = useState<AccountType>('futures')
+  const [formStartingCapital, setFormStartingCapital] = useState('')
+  const [formCurrentCapital, setFormCurrentCapital] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const allPnl = accountInfos.reduce((sum, a) => sum + a.totalPnl, 0)
@@ -47,6 +49,8 @@ export function AccountTabs() {
     setFormId(account.id)
     setFormLabel(account.label)
     setFormType(account.type)
+    setFormStartingCapital(account.startingCapital != null ? String(account.startingCapital) : '')
+    setFormCurrentCapital(account.currentCapital != null ? String(account.currentCapital) : '')
     setConfirmDelete(false)
     setModal('edit')
   }
@@ -75,7 +79,14 @@ export function AccountTabs() {
 
   const handleSaveEdit = () => {
     if (!editingAccount) return
-    updateAccount(editingAccount.id, { label: formLabel, type: formType })
+    const starting = formStartingCapital.trim() ? Number(formStartingCapital) : undefined
+    const current = formCurrentCapital.trim() ? Number(formCurrentCapital) : undefined
+    updateAccount(editingAccount.id, {
+      label: formLabel,
+      type: formType,
+      startingCapital: starting,
+      currentCapital: current,
+    })
     closeModal()
   }
 
@@ -118,8 +129,8 @@ export function AccountTabs() {
                 badgeColor={meta.color}
                 trailing={
                   account.tradeCount > 0 ? (
-                    <span className={cn('text-[10px] font-semibold', account.totalPnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>
-                      {formatCurrency(account.totalPnl)}
+                    <span className={cn('text-[10px] font-semibold', (computeAccountReturn(account.startingCapital, account.currentCapital) ?? account.totalPnl) >= 0 ? 'text-emerald-600' : 'text-red-500')}>
+                      {formatCurrency(computeAccountReturn(account.startingCapital, account.currentCapital) ?? account.totalPnl)}
                     </span>
                   ) : (
                     <span className="text-[10px] text-slate-400">无数据</span>
@@ -192,6 +203,28 @@ export function AccountTabs() {
               <input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="期货账户" className="form-input" autoFocus />
             </Field>
             <TypePicker value={formType} onChange={setFormType} />
+            <Field label="本金（起始资金）" hint="与 IBKR 入金金额一致，如 10000">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formStartingCapital}
+                onChange={(e) => setFormStartingCapital(e.target.value)}
+                placeholder="10000"
+                className="form-input"
+              />
+            </Field>
+            <Field label="当前净资产" hint="与 IBKR 账户总资产一致，如 10617">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formCurrentCapital}
+                onChange={(e) => setFormCurrentCapital(e.target.value)}
+                placeholder="10617"
+                className="form-input"
+              />
+            </Field>
 
             <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
               {editingAccount.tradeCount} 笔交易 · {editingJournalCount} 条日记

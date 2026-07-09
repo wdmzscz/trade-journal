@@ -11,6 +11,7 @@ import {
 import { isCloudEnabled } from '../lib/supabase'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { cn } from '../utils/cn'
+import { formatCurrency } from '../utils/stats'
 
 export function IbkrSyncPage() {
   const { refreshFromCloud, cloudEnabled, setSelectedAccount } = useTradeStore()
@@ -83,7 +84,7 @@ export function IbkrSyncPage() {
         result.warnings && result.warnings.length > 0 ? ` · ${result.warnings.join('；')}` : ''
       setMessage({
         type: result.added > 0 || (result.tradeCount ?? 0) > 0 ? 'ok' : 'err',
-        text: `同步完成：解析到 ${result.tradeCount ?? 0} 笔，新增 ${result.added} 笔，跳过重复 ${result.skipped} 笔（${result.accountLabel ?? 'IBKR'} · ${result.account}）${warnText}`,
+        text: `同步完成：${result.tradeCount ?? 0} 笔交易，交易盈亏合计 ${formatCurrency(result.tradePnl ?? 0)}（已替换旧记录 ${result.skipped} 笔）${warnText}`,
       })
     } catch (err) {
       setMessage({ type: 'err', text: err instanceof Error ? err.message : '同步失败' })

@@ -13,13 +13,25 @@ import { AccountScopeBanner } from '../components/AccountScopeBanner'
 import {
   computeDashboardStats, computeDailyPnl, computeCumulativePnl,
   computeSymbolStats, computeSetupStats, computeWinLossDistribution,
-  computeDayOfWeekStats, formatCurrency, formatPercent,
+  computeDayOfWeekStats, formatCurrency, formatPercent, computeAccountReturn,
 } from '../utils/stats'
 
 export function DashboardPage() {
-  const { filteredTrades } = useTradeStore()
+  const { filteredTrades, selectedAccount, selectedAccountInfo, accountInfos } = useTradeStore()
 
   const stats = useMemo(() => computeDashboardStats(filteredTrades), [filteredTrades])
+  const accountReturn = useMemo(() => {
+    if (selectedAccount === 'all') {
+      const returns = accountInfos
+        .map((a) => computeAccountReturn(a.startingCapital, a.currentCapital))
+        .filter((v): v is number => v != null)
+      return returns.length > 0 ? returns.reduce((s, v) => s + v, 0) : null
+    }
+    return computeAccountReturn(
+      selectedAccountInfo?.startingCapital,
+      selectedAccountInfo?.currentCapital
+    )
+  }, [selectedAccount, selectedAccountInfo, accountInfos])
   const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const cumulativePnl = useMemo(() => computeCumulativePnl(dailyPnl), [dailyPnl])
   const symbolStats = useMemo(() => computeSymbolStats(filteredTrades).slice(0, 8), [filteredTrades])
@@ -42,12 +54,25 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {accountReturn != null && (
+          <StatCard
+            title="账户总盈亏"
+            value={formatCurrency(accountReturn)}
+            trend={accountReturn >= 0 ? 'up' : 'down'}
+            subtitle="净资产 − 本金（与 IBKR 账户一致）"
+            icon={<DollarSign className="h-5 w-5" />}
+          />
+        )}
         <StatCard
-          title="总盈亏 (P&L)"
+          title={accountReturn != null ? '交易盈亏合计' : '总盈亏 (P&L)'}
           value={formatCurrency(stats.totalPnl)}
           trend={stats.totalPnl >= 0 ? 'up' : 'down'}
-          subtitle={`${stats.closedTrades} 笔已平仓交易`}
-          icon={<DollarSign className="h-5 w-5" />}
+          subtitle={
+            accountReturn != null
+              ? `${stats.closedTrades} 笔已平仓 · 不含利息/费用差额`
+              : `${stats.closedTrades} 笔已平仓交易`
+          }
+          icon={<Activity className="h-5 w-5" />}
         />
         <StatCard
           title="胜率"

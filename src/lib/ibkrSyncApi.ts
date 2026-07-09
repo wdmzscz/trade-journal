@@ -23,6 +23,7 @@ export interface IbkrSyncResult {
   account: string
   accountLabel?: string
   tradeCount: number
+  tradePnl?: number
   warnings?: string[]
   error?: string
 }

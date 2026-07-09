@@ -2,8 +2,6 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 import { fetchIbkrFlexCsv } from '../_shared/flexApi.ts'
 import {
   parseIbkrStatementText,
-  mergeTrades,
-  tradeFingerprint,
   type ParsedTrade,
   type ParsedFinancials,
 } from '../_shared/ibkrParser.ts'
@@ -127,43 +125,19 @@ async function syncUser(supabase: SupabaseClient, settings: SyncSettings) {
   const csv = await fetchIbkrFlexCsv(settings.flex_token, settings.flex_query_id)
   const parsed = parseIbkrStatementText(csv)
 
-  const { data: existingRows, error: fetchError } = await supabase
+  const { count: removedCount, error: deleteError } = await supabase
     .from('trades')
-    .select('*')
+    .delete({ count: 'exact' })
     .eq('user_id', settings.user_id)
+    .eq('account', parsed.account)
 
-  if (fetchError) throw fetchError
+  if (deleteError) throw deleteError
 
-  const existing: ParsedTrade[] = (existingRows ?? []).map((row) => ({
-    id: row.id,
-    symbol: row.symbol,
-    side: row.side,
-    status: row.status,
-    assetClass: row.asset_class ?? undefined,
-    entryDate: row.entry_date,
-    exitDate: row.exit_date ?? undefined,
-    entryPrice: Number(row.entry_price),
-    exitPrice: row.exit_price != null ? Number(row.exit_price) : undefined,
-    quantity: Number(row.quantity),
-    fees: Number(row.fees),
-    pnl: Number(row.pnl),
-    setup: row.setup ?? undefined,
-    tags: row.tags ?? [],
-    notes: row.notes ?? undefined,
-    account: row.account,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }))
-
-  const { merged, added, skipped } = mergeTrades(existing, parsed.trades)
-
-  if (added > 0) {
-    const fingerprints = new Set(existing.map((t) => tradeFingerprint(t)))
-    const toAdd = parsed.trades.filter((t) => !fingerprints.has(tradeFingerprint(t)))
+  if (parsed.trades.length > 0) {
     const batchSize = 100
-    for (let i = 0; i < toAdd.length; i += batchSize) {
-      const batch = toAdd.slice(i, i + batchSize).map((t) => tradeToRow(t, settings.user_id))
-      const { error } = await supabase.from('trades').upsert(batch)
+    for (let i = 0; i < parsed.trades.length; i += batchSize) {
+      const batch = parsed.trades.slice(i, i + batchSize).map((t) => tradeToRow(t, settings.user_id))
+      const { error } = await supabase.from('trades').insert(batch)
       if (error) throw error
     }
   }
@@ -179,24 +153,29 @@ async function syncUser(supabase: SupabaseClient, settings: SyncSettings) {
   await cleanupPlaceholderAccounts(supabase, settings.user_id, parsed.account)
 
   const now = new Date().toISOString()
+  const tradePnl = parsed.trades
+    .filter((t) => t.status === 'closed')
+    .reduce((sum, t) => sum + t.pnl, 0)
+
   await supabase
     .from('ibkr_sync_settings')
     .update({
       last_sync_at: now,
       last_sync_status: 'success',
       last_sync_message: parsed.errors.length > 0 ? parsed.errors.slice(0, 3).join('; ') : '同步成功',
-      last_sync_added: added,
-      last_sync_skipped: skipped,
+      last_sync_added: parsed.trades.length,
+      last_sync_skipped: removedCount ?? 0,
       updated_at: now,
     })
     .eq('user_id', settings.user_id)
 
   return {
-    added,
-    skipped,
+    added: parsed.trades.length,
+    skipped: removedCount ?? 0,
     account: parsed.account,
     accountLabel: parsed.accountLabel,
     tradeCount: parsed.trades.length,
+    tradePnl,
     warnings: parsed.errors,
   }
 }

@@ -30,6 +30,15 @@ export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`
 }
 
+export function computeAccountReturn(
+  startingCapital?: number | null,
+  currentCapital?: number | null
+): number | null {
+  if (startingCapital == null || currentCapital == null) return null
+  if (startingCapital <= 0 || currentCapital <= 0) return null
+  return currentCapital - startingCapital
+}
+
 export function calculateTradePnl(
   side: 'long' | 'short',
   entryPrice: number,

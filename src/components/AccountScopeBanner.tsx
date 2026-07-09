@@ -1,5 +1,5 @@
 import { useTradeStore } from '../hooks/useTradeStore'
-import { formatCurrency } from '../utils/stats'
+import { formatCurrency, computeAccountReturn } from '../utils/stats'
 import { cn } from '../utils/cn'
 
 export function AccountScopeBanner({ className }: { className?: string }) {
@@ -12,7 +12,13 @@ export function AccountScopeBanner({ className }: { className?: string }) {
   } = useTradeStore()
 
   const closed = filteredTrades.filter((t) => t.status === 'closed')
-  const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
+  const tradePnl = closed.reduce((sum, t) => sum + t.pnl, 0)
+  const accountReturn = selectedAccount === 'all'
+    ? accountInfos
+        .map((a) => computeAccountReturn(a.startingCapital, a.currentCapital))
+        .filter((v): v is number => v != null)
+        .reduce((s, v) => s + v, 0) || null
+    : computeAccountReturn(selectedAccountInfo?.startingCapital, selectedAccountInfo?.currentCapital)
   const otherAccountsWithData = accountInfos.filter(
     (a) => a.id !== selectedAccount && a.tradeCount > 0
   )
@@ -25,7 +31,17 @@ export function AccountScopeBanner({ className }: { className?: string }) {
           <span className="mx-2 text-brand-300">|</span>
           {filteredTrades.length} 笔交易
           <span className="mx-2 text-brand-300">|</span>
-          总盈亏 <span className={cn('font-semibold', totalPnl >= 0 ? 'text-emerald-700' : 'text-red-600')}>{formatCurrency(totalPnl)}</span>
+          {accountReturn != null ? (
+            <>
+              账户总盈亏 <span className={cn('font-semibold', accountReturn >= 0 ? 'text-emerald-700' : 'text-red-600')}>{formatCurrency(accountReturn)}</span>
+              <span className="mx-2 text-brand-300">|</span>
+              交易盈亏 {formatCurrency(tradePnl)}
+            </>
+          ) : (
+            <>
+              总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-700' : 'text-red-600')}>{formatCurrency(tradePnl)}</span>
+            </>
+          )}
         </p>
       </div>
     )
@@ -75,14 +91,31 @@ export function AccountScopeBanner({ className }: { className?: string }) {
         )}
         <span className="mx-2 text-slate-200">|</span>
         {filteredTrades.length} 笔交易
-        {selectedAccountInfo?.currentCapital != null && selectedAccountInfo.currentCapital > 0 && (
+        {accountReturn != null && selectedAccountInfo?.currentCapital != null && selectedAccountInfo.currentCapital > 0 && (
           <>
             <span className="mx-2 text-slate-200">|</span>
-            本金 <span className="font-semibold text-slate-900">{formatCurrency(selectedAccountInfo.currentCapital)}</span>
+            净资产 <span className="font-semibold text-slate-900">{formatCurrency(selectedAccountInfo.currentCapital)}</span>
           </>
         )}
-        <span className="mx-2 text-slate-200">|</span>
-        盈亏 <span className={cn('font-semibold', totalPnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(totalPnl)}</span>
+        {accountReturn != null ? (
+          <>
+            <span className="mx-2 text-slate-200">|</span>
+            账户总盈亏 <span className={cn('font-semibold', accountReturn >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(accountReturn)}</span>
+            <span className="mx-2 text-slate-200">|</span>
+            交易盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
+          </>
+        ) : (
+          <>
+            {selectedAccountInfo?.currentCapital != null && selectedAccountInfo.currentCapital > 0 && (
+              <>
+                <span className="mx-2 text-slate-200">|</span>
+                本金 <span className="font-semibold text-slate-900">{formatCurrency(selectedAccountInfo.currentCapital)}</span>
+              </>
+            )}
+            <span className="mx-2 text-slate-200">|</span>
+            盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
+          </>
+        )}
       </p>
     </div>
   )
