@@ -14,7 +14,6 @@ import {
   computeDashboardStats, computeDailyPnl, computeCumulativePnl,
   computeSymbolStats, computeSetupStats, computeWinLossDistribution,
   computeDayOfWeekStats, formatCurrency, formatPercent, computeAccountReturn,
-  resolveStartingCapital,
 } from '../utils/stats'
 
 export function DashboardPage() {
@@ -27,7 +26,7 @@ export function DashboardPage() {
         .map((a) => {
           const profile = accountProfiles.find((p) => p.id === a.id)
           return computeAccountReturn(
-            resolveStartingCapital(a.startingCapital ?? 0, profile?.totalDeposits),
+            profile?.startingCapital,
             a.currentCapital,
             profile?.totalDeposits
           )
@@ -37,10 +36,7 @@ export function DashboardPage() {
     }
     const profile = accountProfiles.find((p) => p.id === selectedAccount)
     return computeAccountReturn(
-      resolveStartingCapital(
-        selectedAccountInfo?.startingCapital ?? 0,
-        profile?.totalDeposits
-      ),
+      profile?.startingCapital,
       selectedAccountInfo?.currentCapital,
       profile?.totalDeposits
     )

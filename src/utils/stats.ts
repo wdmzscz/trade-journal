@@ -30,7 +30,7 @@ export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`
 }
 
-/** 期初本金：来自 IBKR 期初净值；新账户期初为 0 时用累计入金 */
+/** 期初净值（IBKR Change in NAV 的 Starting Value） */
 export function resolveStartingCapital(
   startingCapital: number,
   totalDeposits?: number | null
@@ -40,19 +40,24 @@ export function resolveStartingCapital(
   return 0
 }
 
+/** 累计入金本金：优先 IBKR 存款合计，不用净资产 */
+export function resolvePrincipalCapital(
+  startingCapital: number,
+  totalDeposits?: number | null
+): number {
+  if (totalDeposits != null && totalDeposits > 0) return totalDeposits
+  if (startingCapital > 0) return startingCapital
+  return 0
+}
+
 export function computeAccountReturn(
   startingCapital?: number | null,
   currentCapital?: number | null,
   totalDeposits?: number | null
 ): number | null {
   if (currentCapital == null || currentCapital <= 0) return null
-  const basis =
-    startingCapital != null && startingCapital > 0
-      ? startingCapital
-      : totalDeposits != null && totalDeposits > 0
-        ? totalDeposits
-        : null
-  if (basis == null || basis <= 0) return null
+  const basis = resolvePrincipalCapital(startingCapital ?? 0, totalDeposits)
+  if (basis <= 0) return null
   return currentCapital - basis
 }
 

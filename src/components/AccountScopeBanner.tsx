@@ -1,5 +1,5 @@
 import { useTradeStore } from '../hooks/useTradeStore'
-import { formatCurrency, computeAccountReturn, resolveStartingCapital } from '../utils/stats'
+import { formatCurrency, computeAccountReturn, resolvePrincipalCapital } from '../utils/stats'
 import { cn } from '../utils/cn'
 
 export function AccountScopeBanner({ className }: { className?: string }) {
@@ -12,21 +12,34 @@ export function AccountScopeBanner({ className }: { className?: string }) {
         .map((a) => {
           const profile = accountProfiles.find((p) => p.id === a.id)
           return computeAccountReturn(
-            resolveStartingCapital(a.startingCapital ?? 0, profile?.totalDeposits),
+            profile?.startingCapital,
             a.currentCapital,
             profile?.totalDeposits
           )
         })
         .filter((v): v is number => v != null)
         .reduce((s, v) => s + v, 0) || null
-    : computeAccountReturn(
-        resolveStartingCapital(
-          selectedAccountInfo?.startingCapital ?? 0,
-          accountProfiles.find((p) => p.id === selectedAccount)?.totalDeposits
-        ),
-        selectedAccountInfo?.currentCapital,
-        accountProfiles.find((p) => p.id === selectedAccount)?.totalDeposits
+    : (() => {
+        const profile = accountProfiles.find((p) => p.id === selectedAccount)
+        return computeAccountReturn(
+          profile?.startingCapital,
+          selectedAccountInfo?.currentCapital,
+          profile?.totalDeposits
+        )
+      })()
+
+  const selectedProfile = selectedAccount === 'all'
+    ? null
+    : accountProfiles.find((p) => p.id === selectedAccount)
+
+  const principalCapital = selectedProfile
+    ? resolvePrincipalCapital(selectedProfile.startingCapital ?? 0, selectedProfile.totalDeposits)
+    : accountProfiles.reduce(
+        (sum, profile) =>
+          sum + resolvePrincipalCapital(profile.startingCapital ?? 0, profile.totalDeposits),
+        0
       )
+
   const otherAccountsWithData = accountInfos.filter(
     (a) => a.id !== selectedAccount && a.tradeCount > 0
   )
@@ -38,6 +51,12 @@ export function AccountScopeBanner({ className }: { className?: string }) {
           <span className="font-semibold">全部账户汇总</span>
           <span className="mx-2 text-brand-300">|</span>
           {filteredTrades.length} 笔交易
+          {principalCapital > 0 && (
+            <>
+              <span className="mx-2 text-brand-300">|</span>
+              累计入金 <span className="font-semibold">{formatCurrency(principalCapital)}</span>
+            </>
+          )}
           <span className="mx-2 text-brand-300">|</span>
           {accountReturn != null ? (
             <>
@@ -99,7 +118,13 @@ export function AccountScopeBanner({ className }: { className?: string }) {
         )}
         <span className="mx-2 text-slate-200">|</span>
         {filteredTrades.length} 笔交易
-        {accountReturn != null && selectedAccountInfo?.currentCapital != null && selectedAccountInfo.currentCapital > 0 && (
+        {principalCapital > 0 && (
+          <>
+            <span className="mx-2 text-slate-200">|</span>
+            累计入金 <span className="font-semibold text-slate-900">{formatCurrency(principalCapital)}</span>
+          </>
+        )}
+        {selectedAccountInfo?.currentCapital != null && selectedAccountInfo.currentCapital > 0 && (
           <>
             <span className="mx-2 text-slate-200">|</span>
             净资产 <span className="font-semibold text-slate-900">{formatCurrency(selectedAccountInfo.currentCapital)}</span>
@@ -109,21 +134,10 @@ export function AccountScopeBanner({ className }: { className?: string }) {
           <>
             <span className="mx-2 text-slate-200">|</span>
             账户总盈亏 <span className={cn('font-semibold', accountReturn >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(accountReturn)}</span>
-            <span className="mx-2 text-slate-200">|</span>
-            交易盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
           </>
-        ) : (
-          <>
-            {selectedAccountInfo?.currentCapital != null && selectedAccountInfo.currentCapital > 0 && (
-              <>
-                <span className="mx-2 text-slate-200">|</span>
-                本金 <span className="font-semibold text-slate-900">{formatCurrency(selectedAccountInfo.currentCapital)}</span>
-              </>
-            )}
-            <span className="mx-2 text-slate-200">|</span>
-            盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
-          </>
-        )}
+        ) : null}
+        <span className="mx-2 text-slate-200">|</span>
+        交易盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
       </p>
     </div>
   )

@@ -119,6 +119,7 @@ interface TradeStoreContextValue {
     type?: AccountType
     startingCapital?: number
     currentCapital?: number
+    totalDeposits?: number
   }) => void
   deleteAccount: (id: string) => void
   addTrade: (trade: Omit<Trade, 'id' | 'createdAt' | 'updatedAt' | 'pnl'> & { pnl?: number }) => void
@@ -299,6 +300,7 @@ export function TradeStoreProvider({
     type?: AccountType
     startingCapital?: number
     currentCapital?: number
+    totalDeposits?: number
   }) => {
     setAccountProfiles((prev) => {
       const existing = prev.find((p) => p.id === id)
@@ -310,6 +312,7 @@ export function TradeStoreProvider({
           type: updates.type ?? existing.type,
           startingCapital: updates.startingCapital ?? existing.startingCapital,
           currentCapital: updates.currentCapital ?? existing.currentCapital,
+          totalDeposits: updates.totalDeposits ?? existing.totalDeposits,
         }
       } else {
         profile = {
@@ -319,6 +322,7 @@ export function TradeStoreProvider({
           createdAt: new Date().toISOString(),
           startingCapital: updates.startingCapital,
           currentCapital: updates.currentCapital,
+          totalDeposits: updates.totalDeposits,
         }
       }
 

@@ -23,7 +23,7 @@ import {
   dayResultColor,
   formatCurrency,
   formatPercent,
-  resolveStartingCapital,
+  resolvePrincipalCapital,
 } from '../utils/stats'
 import type { DayResult } from '../types'
 
@@ -59,7 +59,7 @@ export function CalendarPage() {
       return {
         startingCapital: accountProfiles.reduce(
           (sum, profile) =>
-            sum + resolveStartingCapital(profile.startingCapital ?? 0, profile.totalDeposits),
+            sum + resolvePrincipalCapital(profile.startingCapital ?? 0, profile.totalDeposits),
           0
         ),
         currentCapital: accountProfiles.reduce((s, p) => s + (p.currentCapital ?? 0), 0),
@@ -70,7 +70,7 @@ export function CalendarPage() {
     }
     const profile = accountProfiles.find((p) => p.id === selectedAccount)
     return {
-      startingCapital: resolveStartingCapital(profile?.startingCapital ?? 0, profile?.totalDeposits),
+      startingCapital: resolvePrincipalCapital(profile?.startingCapital ?? 0, profile?.totalDeposits),
       currentCapital: profile?.currentCapital,
       totalDeposits: profile?.totalDeposits,
       cashFlows: profile?.cashFlows ?? [],

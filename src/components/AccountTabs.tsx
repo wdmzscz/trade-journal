@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { cn } from '../utils/cn'
-import { formatCurrency, computeAccountReturn, resolveStartingCapital } from '../utils/stats'
+import { formatCurrency, computeAccountReturn } from '../utils/stats'
 import type { AccountInfo, AccountType } from '../types'
 
 const TYPE_META: Record<AccountType, { icon: typeof TrendingUp; badge: string; color: string }> = {
@@ -49,7 +49,13 @@ export function AccountTabs() {
     setFormId(account.id)
     setFormLabel(account.label)
     setFormType(account.type)
-    setFormStartingCapital(account.startingCapital != null ? String(account.startingCapital) : '')
+    setFormStartingCapital(
+      account.totalDeposits != null
+        ? String(account.totalDeposits)
+        : account.startingCapital != null
+          ? String(account.startingCapital)
+          : ''
+    )
     setFormCurrentCapital(account.currentCapital != null ? String(account.currentCapital) : '')
     setConfirmDelete(false)
     setModal('edit')
@@ -79,12 +85,12 @@ export function AccountTabs() {
 
   const handleSaveEdit = () => {
     if (!editingAccount) return
-    const starting = formStartingCapital.trim() ? Number(formStartingCapital) : undefined
+    const deposits = formStartingCapital.trim() ? Number(formStartingCapital) : undefined
     const current = formCurrentCapital.trim() ? Number(formCurrentCapital) : undefined
     updateAccount(editingAccount.id, {
       label: formLabel,
       type: formType,
-      startingCapital: starting,
+      totalDeposits: deposits,
       currentCapital: current,
     })
     closeModal()
@@ -129,8 +135,8 @@ export function AccountTabs() {
                 badgeColor={meta.color}
                 trailing={
                   account.tradeCount > 0 ? (
-                    <span className={cn('text-[10px] font-semibold', (computeAccountReturn(resolveStartingCapital(account.startingCapital ?? 0, account.totalDeposits), account.currentCapital, account.totalDeposits) ?? account.totalPnl) >= 0 ? 'text-emerald-600' : 'text-red-500')}>
-                      {formatCurrency(computeAccountReturn(resolveStartingCapital(account.startingCapital ?? 0, account.totalDeposits), account.currentCapital, account.totalDeposits) ?? account.totalPnl)}
+                    <span className={cn('text-[10px] font-semibold', (computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl) >= 0 ? 'text-emerald-600' : 'text-red-500')}>
+                      {formatCurrency(computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl)}
                     </span>
                   ) : (
                     <span className="text-[10px] text-slate-400">无数据</span>
@@ -203,7 +209,7 @@ export function AccountTabs() {
               <input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="期货账户" className="form-input" autoFocus />
             </Field>
             <TypePicker value={formType} onChange={setFormType} />
-            <Field label="本金（起始资金）" hint="与 IBKR 入金金额一致，如 10000">
+            <Field label="累计入金" hint="来自 IBKR 存款记录；同步后自动填写，如 10000">
               <input
                 type="number"
                 min="0"
