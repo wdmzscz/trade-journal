@@ -78,7 +78,7 @@ export function DashboardPage() {
           trend={stats.totalPnl >= 0 ? 'up' : 'down'}
           subtitle={
             accountReturn != null
-              ? `${stats.closedTrades} 笔已平仓 · 不含利息/费用差额`
+              ? `${stats.closedTrades} 笔已平仓 · 全部平仓时应与账户总盈亏一致`
               : `${stats.closedTrades} 笔已平仓交易`
           }
           icon={<Activity className="h-5 w-5" />}

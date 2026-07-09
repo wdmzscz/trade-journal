@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType } from '../types'
 import { calculateTradePnl, resolveStartingCapital } from '../utils/stats'
 import { mergeTrades } from '../utils/storage'
-import type { IbkrAccountFinancials } from '../utils/ibkrImport'
+import { mergeIbkrFinancials, type IbkrAccountFinancials } from '../utils/ibkrImport'
 import { isCloudEnabled } from '../lib/supabase'
 import {
   fetchAllData,
@@ -89,15 +89,29 @@ function inferAccountType(trades: Trade[]): AccountType {
   return 'other'
 }
 
-function applyFinancialsToProfile(profile: AccountProfile, financials: IbkrAccountFinancials): AccountProfile {
+function applyFinancialsToProfile(
+  profile: AccountProfile,
+  financials: IbkrAccountFinancials
+): AccountProfile {
+  const merged = mergeIbkrFinancials(
+    {
+      startingCapital: profile.startingCapital ?? 0,
+      currentCapital: profile.currentCapital ?? 0,
+      totalDeposits: profile.totalDeposits ?? 0,
+      totalWithdrawals: profile.totalWithdrawals ?? 0,
+      cashFlows: profile.cashFlows ?? [],
+      navHistory: profile.navHistory ?? [],
+    },
+    financials
+  )
   return {
     ...profile,
-    startingCapital: financials.startingCapital,
-    currentCapital: financials.currentCapital,
-    totalDeposits: financials.totalDeposits,
-    totalWithdrawals: financials.totalWithdrawals,
-    cashFlows: financials.cashFlows,
-    navHistory: financials.navHistory,
+    startingCapital: merged.startingCapital,
+    currentCapital: merged.currentCapital,
+    totalDeposits: merged.totalDeposits,
+    totalWithdrawals: merged.totalWithdrawals,
+    cashFlows: merged.cashFlows,
+    navHistory: merged.navHistory,
   }
 }
 

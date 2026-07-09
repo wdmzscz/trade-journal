@@ -90,13 +90,31 @@ async function upsertProfile(
     label,
     type: existing?.type ?? inferAccountType(accountTrades),
     created_at: existing?.created_at ?? now,
-    starting_capital: reliableFinancials?.startingCapital ?? existing?.starting_capital ?? null,
+    starting_capital:
+      reliableFinancials?.navHistory?.length
+        ? (reliableFinancials.startingCapital ?? existing?.starting_capital ?? null)
+        : (existing?.starting_capital ?? reliableFinancials?.startingCapital ?? null),
     current_capital: reliableFinancials?.currentCapital ?? existing?.current_capital ?? null,
-    total_deposits: reliableFinancials?.totalDeposits ?? existing?.total_deposits ?? null,
-    total_withdrawals: reliableFinancials?.totalWithdrawals ?? existing?.total_withdrawals ?? null,
-    cash_flows: reliableFinancials?.cashFlows?.length
-      ? reliableFinancials.cashFlows
-      : (existing?.cash_flows ?? []),
+    total_deposits: Math.max(
+      existing?.total_deposits ?? 0,
+      reliableFinancials?.totalDeposits ?? 0,
+      (reliableFinancials?.cashFlows ?? existing?.cash_flows ?? [])
+        .filter((flow: { amount: number }) => flow.amount > 0)
+        .reduce((sum: number, flow: { amount: number }) => sum + flow.amount, 0)
+    ) || null,
+    total_withdrawals: Math.max(
+      existing?.total_withdrawals ?? 0,
+      reliableFinancials?.totalWithdrawals ?? 0
+    ) || null,
+    cash_flows: (() => {
+      const merged = [...(existing?.cash_flows ?? [])]
+      for (const flow of reliableFinancials?.cashFlows ?? []) {
+        if (!merged.some((f) => f.date === flow.date && Math.abs(f.amount - flow.amount) < 0.01)) {
+          merged.push(flow)
+        }
+      }
+      return merged.length > 0 ? merged : (existing?.cash_flows ?? [])
+    })(),
     nav_history: reliableFinancials?.navHistory?.length
       ? reliableFinancials.navHistory
       : (existing?.nav_history ?? []),

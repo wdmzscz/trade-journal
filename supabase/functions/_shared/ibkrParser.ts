@@ -50,6 +50,17 @@ interface IbkrOrder {
   code: 'O' | 'C'
 }
 
+interface OpenLot extends IbkrOrder {
+  remainingQty: number
+}
+
+function parseOpenCloseCode(raw: string | undefined): 'O' | 'C' | null {
+  const code = raw?.trim() ?? ''
+  if (code === 'O') return 'O'
+  if (code.startsWith('C')) return 'C'
+  return null
+}
+
 const TRADE_SECTIONS = new Set(['交易', 'Trades'])
 const ACCOUNT_SECTIONS = new Set(['账户信息', 'Account Information'])
 const NAV_CHANGE_SECTIONS = new Set(['净资产值变更', 'Change in NAV'])
@@ -128,8 +139,8 @@ function extractOrders(rows: string[][]): IbkrOrder[] {
   const orders: IbkrOrder[] = []
   for (const row of rows) {
     if (!TRADE_SECTIONS.has(row[0]) || row[1] !== 'Data' || row[2] !== 'Order') continue
-    const code = row[15]?.trim() as 'O' | 'C' | undefined
-    if (code !== 'O' && code !== 'C') continue
+    const code = parseOpenCloseCode(row[15])
+    if (!code) continue
     const symbol = row[5]?.trim()
     if (!symbol) continue
     orders.push({
@@ -150,47 +161,71 @@ function extractOrders(rows: string[][]): IbkrOrder[] {
 function pairOrders(orders: IbkrOrder[], account: string): { trades: ParsedTrade[]; errors: string[] } {
   const trades: ParsedTrade[] = []
   const errors: string[] = []
-  const openQueues = new Map<string, IbkrOrder[]>()
+  const openQueues = new Map<string, OpenLot[]>()
 
   for (const order of orders) {
     if (order.code === 'O') {
       const queue = openQueues.get(order.symbol) ?? []
-      queue.push(order)
+      queue.push({ ...order, remainingQty: Math.abs(order.quantity) || 1 })
       openQueues.set(order.symbol, queue)
       continue
     }
 
     const queue = openQueues.get(order.symbol) ?? []
-    const open = queue.shift()
-    if (!open) {
+    let closeQty = Math.abs(order.quantity) || 1
+    const totalCloseQty = closeQty
+    let allocatedPnl = 0
+
+    if (queue.length === 0) {
       errors.push(`${order.symbol} 平仓单缺少开仓：${order.datetime}`)
       continue
     }
 
-    const side = open.quantity > 0 ? 'long' : 'short'
-    const assetClass = normalizeAssetClass(open.assetClass)
-    const now = new Date().toISOString()
+    while (closeQty > 0 && queue.length > 0) {
+      const open = queue[0]
+      const matchQty = Math.min(closeQty, open.remainingQty)
+      const pnl =
+        closeQty <= open.remainingQty
+          ? order.realizedPnl - allocatedPnl
+          : (order.realizedPnl * matchQty) / totalCloseQty
+      allocatedPnl += pnl
 
-    trades.push({
-      id: crypto.randomUUID(),
-      symbol: order.symbol,
-      side,
-      status: 'closed',
-      assetClass,
-      entryDate: parseIbkrDateTime(open.datetime),
-      exitDate: parseIbkrDateTime(order.datetime),
-      entryPrice: open.price,
-      exitPrice: order.price,
-      quantity: Math.abs(open.quantity),
-      fees: Math.abs(open.commission) + Math.abs(order.commission),
-      pnl: order.realizedPnl,
-      setup: assetClassLabel(assetClass),
-      tags: [assetClassLabel(assetClass), open.currency],
-      notes: `IBKR ${open.symbol}`,
-      account,
-      createdAt: now,
-      updatedAt: now,
-    })
+      const openQty = Math.abs(open.quantity) || 1
+      const openFee = (Math.abs(open.commission) * matchQty) / openQty
+      const closeFee = (Math.abs(order.commission) * matchQty) / totalCloseQty
+      const side = open.quantity > 0 ? 'long' : 'short'
+      const assetClass = normalizeAssetClass(open.assetClass)
+      const now = new Date().toISOString()
+
+      trades.push({
+        id: crypto.randomUUID(),
+        symbol: order.symbol,
+        side,
+        status: 'closed',
+        assetClass,
+        entryDate: parseIbkrDateTime(open.datetime),
+        exitDate: parseIbkrDateTime(order.datetime),
+        entryPrice: open.price,
+        exitPrice: order.price,
+        quantity: matchQty,
+        fees: openFee + closeFee,
+        pnl,
+        setup: assetClassLabel(assetClass),
+        tags: [assetClassLabel(assetClass), open.currency],
+        notes: `IBKR ${open.symbol}`,
+        account,
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      open.remainingQty -= matchQty
+      closeQty -= matchQty
+      if (open.remainingQty <= 0) queue.shift()
+    }
+
+    if (closeQty > 0) {
+      errors.push(`${order.symbol} 平仓数量超出开仓：${order.datetime}`)
+    }
   }
 
   return { trades, errors }
@@ -199,6 +234,7 @@ function pairOrders(orders: IbkrOrder[], account: string): { trades: ParsedTrade
 function extractFinancials(rows: string[][]): ParsedFinancials | null {
   const navFields = new Map<string, number>()
   let navTotal = 0
+  let cashReportDepositsYtd = 0
   const cashFlows: ParsedFinancials['cashFlows'] = []
 
   for (const row of rows) {
@@ -212,6 +248,10 @@ function extractFinancials(rows: string[][]): ParsedFinancials | null {
         if (total > 0) navTotal = total
       }
     }
+    if (row[0] === 'Cash Report' && row[1] === 'Data' && row[2] === 'Deposits') {
+      const ytd = parseNumber(row[6])
+      if (ytd > 0) cashReportDepositsYtd = Math.max(cashReportDepositsYtd, ytd)
+    }
     if (DEPOSIT_SECTIONS.has(row[0]) && row[1] === 'Data') {
       const key = row[2]?.trim()
       if (!key || key === '总数' || key === 'Total') continue
@@ -223,20 +263,23 @@ function extractFinancials(rows: string[][]): ParsedFinancials | null {
     }
   }
 
-  if (navFields.size === 0 && navTotal === 0 && cashFlows.length === 0) return null
+  if (navFields.size === 0 && navTotal === 0 && cashFlows.length === 0 && cashReportDepositsYtd === 0) {
+    return null
+  }
 
   const startingCapital = navFields.get('开始价值') ?? navFields.get('Starting Value') ?? 0
   const currentCapital = navFields.get('结束价值') ?? navFields.get('Ending Value') ?? navTotal
-
-  const netFlow = navFields.get('存款和取款') ?? navFields.get('Deposits & Withdrawals')
-  const totalDeposits =
-    netFlow != null && netFlow > 0
-      ? netFlow
-      : cashFlows.filter((f) => f.amount > 0).reduce((s, f) => s + f.amount, 0)
+  const periodNetFlow = navFields.get('存款和取款') ?? navFields.get('Deposits & Withdrawals')
+  const flowDeposits = cashFlows.filter((f) => f.amount > 0).reduce((sum, f) => sum + f.amount, 0)
+  const totalDeposits = Math.max(
+    cashReportDepositsYtd,
+    flowDeposits,
+    periodNetFlow != null && periodNetFlow > 0 ? periodNetFlow : 0
+  )
   const totalWithdrawals =
-    netFlow != null && netFlow < 0
-      ? Math.abs(netFlow)
-      : cashFlows.filter((f) => f.amount < 0).reduce((s, f) => s + Math.abs(f.amount), 0)
+    periodNetFlow != null && periodNetFlow < 0
+      ? Math.abs(periodNetFlow)
+      : cashFlows.filter((f) => f.amount < 0).reduce((sum, f) => sum + Math.abs(f.amount), 0)
 
   return { startingCapital, currentCapital, totalDeposits, totalWithdrawals, cashFlows, navHistory: [] }
 }
@@ -304,8 +347,8 @@ function extractFlexOrders(text: string): { orders: IbkrOrder[]; account: string
 
   for (const row of parsed.data) {
     if (row['LevelOfDetail'] !== 'ORDER') continue
-    const code = row['Open/CloseIndicator']?.trim() as 'O' | 'C' | undefined
-    if (code !== 'O' && code !== 'C') continue
+    const code = parseOpenCloseCode(row['Open/CloseIndicator'])
+    if (!code) continue
     const symbol = row['Symbol']?.trim()
     if (!symbol) continue
 
