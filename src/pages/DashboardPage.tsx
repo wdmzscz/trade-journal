@@ -53,6 +53,9 @@ export function DashboardPage() {
     [filteredTrades]
   )
 
+  const isAllAccounts = selectedAccount === 'all'
+  const hasAccountNav = accountReturn != null
+
   return (
     <div className="space-y-6">
       <AccountScopeBanner />
@@ -63,25 +66,34 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {accountReturn != null && (
+        {hasAccountNav && (
           <StatCard
-            title="账户总盈亏"
+            title={isAllAccounts ? '账户总盈亏' : '当前盈亏'}
             value={formatCurrency(accountReturn)}
             trend={accountReturn >= 0 ? 'up' : 'down'}
-            subtitle="净资产 − 本金（与 IBKR 账户一致）"
+            subtitle={isAllAccounts ? '净资产 − 本金（与 IBKR 账户一致）' : '净资产 − 累计入金'}
             icon={<DollarSign className="h-5 w-5" />}
           />
         )}
-        {(selectedAccount === 'all' || accountReturn == null) && (
+        {isAllAccounts && (
           <StatCard
-            title={accountReturn != null && selectedAccount === 'all' ? '交易盈亏合计' : '总盈亏 (P&L)'}
+            title={hasAccountNav ? '交易盈亏合计' : '总盈亏 (P&L)'}
             value={formatCurrency(stats.totalPnl)}
             trend={stats.totalPnl >= 0 ? 'up' : 'down'}
             subtitle={
-              accountReturn != null && selectedAccount === 'all'
+              hasAccountNav
                 ? `${stats.closedTrades} 笔已平仓 · 全部平仓时应与账户总盈亏一致`
                 : `${stats.closedTrades} 笔已平仓交易`
             }
+            icon={<Activity className="h-5 w-5" />}
+          />
+        )}
+        {!isAllAccounts && !hasAccountNav && (
+          <StatCard
+            title="总盈亏 (P&L)"
+            value={formatCurrency(stats.totalPnl)}
+            trend={stats.totalPnl >= 0 ? 'up' : 'down'}
+            subtitle={`${stats.closedTrades} 笔已平仓交易`}
             icon={<Activity className="h-5 w-5" />}
           />
         )}

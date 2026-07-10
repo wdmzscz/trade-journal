@@ -133,11 +133,14 @@ export function AccountScopeBanner({ className }: { className?: string }) {
         {accountReturn != null ? (
           <>
             <span className="mx-2 text-slate-200">|</span>
-            账户总盈亏 <span className={cn('font-semibold', accountReturn >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(accountReturn)}</span>
+            当前盈亏 <span className={cn('font-semibold', accountReturn >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(accountReturn)}</span>
           </>
-        ) : null}
-        <span className="mx-2 text-slate-200">|</span>
-        交易盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
+        ) : (
+          <>
+            <span className="mx-2 text-slate-200">|</span>
+            总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
+          </>
+        )}
       </p>
     </div>
   )
