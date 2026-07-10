@@ -75,28 +75,17 @@ export function DashboardPage() {
             icon={<DollarSign className="h-5 w-5" />}
           />
         )}
-        {isAllAccounts && (
-          <StatCard
-            title={hasAccountNav ? '交易盈亏合计' : '总盈亏 (P&L)'}
-            value={formatCurrency(stats.totalPnl)}
-            trend={stats.totalPnl >= 0 ? 'up' : 'down'}
-            subtitle={
-              hasAccountNav
-                ? `${stats.closedTrades} 笔已平仓 · 全部平仓时应与账户总盈亏一致`
-                : `${stats.closedTrades} 笔已平仓交易`
-            }
-            icon={<Activity className="h-5 w-5" />}
-          />
-        )}
-        {!isAllAccounts && !hasAccountNav && (
-          <StatCard
-            title="总盈亏 (P&L)"
-            value={formatCurrency(stats.totalPnl)}
-            trend={stats.totalPnl >= 0 ? 'up' : 'down'}
-            subtitle={`${stats.closedTrades} 笔已平仓交易`}
-            icon={<Activity className="h-5 w-5" />}
-          />
-        )}
+        <StatCard
+          title={isAllAccounts && hasAccountNav ? '交易盈亏合计' : '总盈亏 (P&L)'}
+          value={formatCurrency(stats.totalPnl)}
+          trend={stats.totalPnl >= 0 ? 'up' : 'down'}
+          subtitle={
+            isAllAccounts && hasAccountNav
+              ? `${stats.closedTrades} 笔已平仓 · 全部平仓时应与账户总盈亏一致`
+              : `${stats.closedTrades} 笔已平仓交易`
+          }
+          icon={<Activity className="h-5 w-5" />}
+        />
         <StatCard
           title="胜率"
           value={formatPercent(stats.winRate)}
