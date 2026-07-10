@@ -3,8 +3,9 @@ import { v4 as uuidv4 } from 'uuid'
 import type { Trade } from '../types'
 import { calculateTradePnl } from './stats'
 import { isIbkrStatement, parseIbkrStatement, type IbkrAccountFinancials } from './ibkrImport'
+import { isFidelityHistory, parseFidelityHistory } from './fidelityImport'
 
-export type CsvFormat = 'generic' | 'ibkr'
+export type CsvFormat = 'generic' | 'ibkr' | 'fidelity'
 
 export interface CsvParseResult {
   trades: Trade[]
@@ -12,7 +13,10 @@ export interface CsvParseResult {
   format: CsvFormat
   account?: string
   accountLabel?: string
+  accounts?: Array<{ id: string; label: string; tradeCount: number }>
+  accountLabels?: Record<string, string>
   accountFinancials?: IbkrAccountFinancials
+  accountFinancialsMap?: Record<string, IbkrAccountFinancials>
 }
 
 export interface CsvRow {
@@ -122,6 +126,21 @@ export function parseCsvText(text: string): CsvParseResult {
       account: result.account,
       accountLabel: result.accountLabel,
       accountFinancials: result.financials ?? undefined,
+    }
+  }
+
+  if (isFidelityHistory(text)) {
+    const result = parseFidelityHistory(text)
+    return {
+      trades: result.trades,
+      errors: result.errors,
+      format: 'fidelity',
+      account: result.account,
+      accountLabel: result.accountLabel,
+      accounts: result.accounts,
+      accountLabels: result.accountLabels,
+      accountFinancials: result.accountFinancials,
+      accountFinancialsMap: result.accountFinancialsMap,
     }
   }
 

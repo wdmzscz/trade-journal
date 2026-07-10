@@ -11,6 +11,7 @@ import { CalendarPage } from './pages/CalendarPage'
 import { AddTradePage } from './pages/AddTradePage'
 import { ImportCsvPage } from './pages/ImportCsvPage'
 import { IbkrSyncPage } from './pages/IbkrSyncPage'
+import { PlaybookPage } from './pages/PlaybookPage'
 
 function LoadingScreen() {
   return (
@@ -34,6 +35,7 @@ function AppRoutes() {
           <Route element={<Layout />}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/trades" element={<TradesPage />} />
+            <Route path="/playbook" element={<PlaybookPage />} />
             <Route path="/journal" element={<DailyJournalPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/add-trade" element={<AddTradePage />} />

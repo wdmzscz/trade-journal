@@ -1,14 +1,20 @@
 import { useMemo, useState } from 'react'
-import { Search, Trash2, Download } from 'lucide-react'
+import { Search, Trash2, Download, LineChart, Pencil } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { PnlBadge } from '../components/PnlBadge'
 import { AccountScopeBanner } from '../components/AccountScopeBanner'
-import { filterTrades } from '../utils/stats'
+import { TradeEntryChartModal } from '../components/TradeEntryChartModal'
+import { filterTrades, formatQuantity } from '../utils/stats'
 import { exportTradesToCsv } from '../utils/csvImport'
-import type { TradeSide, TradeStatus } from '../types'
+import { countValidCharts, getPrimaryChartUrl } from '../utils/chartLinks'
+import type { Trade, TradeSide, TradeStatus } from '../types'
 
 export function TradesPage() {
-  const { filteredTrades, deleteTrade } = useTradeStore()
+  const {
+    filteredTrades, deleteTrade, updateTrade,
+    createPlaybookFromTrade, isTradeInPlaybook,
+  } = useTradeStore()
+  const [chartTrade, setChartTrade] = useState<Trade | null>(null)
   const [search, setSearch] = useState('')
   const [symbol, setSymbol] = useState('all')
   const [side, setSide] = useState<TradeSide | 'all'>('all')
@@ -81,6 +87,7 @@ export function TradesPage() {
                 <th className="px-4 py-3 font-medium">策略</th>
                 <th className="px-4 py-3 font-medium">标签</th>
                 <th className="px-4 py-3 font-medium">状态</th>
+                <th className="px-4 py-3 font-medium">入场图</th>
                 <th className="px-4 py-3 text-right font-medium">盈亏</th>
                 <th className="px-4 py-3 font-medium">操作</th>
               </tr>
@@ -88,7 +95,7 @@ export function TradesPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={13} className="px-4 py-12 text-center text-slate-400">
                     暂无交易记录
                   </td>
                 </tr>
@@ -105,7 +112,7 @@ export function TradesPage() {
                     </td>
                     <td className="px-4 py-3">${trade.entryPrice.toFixed(2)}</td>
                     <td className="px-4 py-3">{trade.exitPrice ? `$${trade.exitPrice.toFixed(2)}` : '-'}</td>
-                    <td className="px-4 py-3">{trade.quantity}</td>
+                    <td className="px-4 py-3">{formatQuantity(trade.quantity)}</td>
                     <td className="px-4 py-3 text-slate-600">{trade.setup ?? '-'}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
@@ -118,6 +125,50 @@ export function TradesPage() {
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${trade.status === 'closed' ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>
                         {trade.status === 'closed' ? '已平仓' : '持仓中'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const chartCount = countValidCharts(trade.entryCharts)
+                        const chartUrl = getPrimaryChartUrl(trade.entryCharts)
+                        if (chartCount > 0 && chartUrl) {
+                          return (
+                            <div className="flex items-center gap-1">
+                              <a
+                                href={chartUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="在 TradingView 中查看入场图"
+                                className="relative inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+                              >
+                                <LineChart className="h-3.5 w-3.5" />
+                                {chartCount} 图
+                                {trade.playbookId && (
+                                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-violet-500" title="已加入图鉴" />
+                                )}
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => setChartTrade(trade)}
+                                title="编辑入场图"
+                                className="rounded-lg border border-slate-200 p-1 text-slate-400 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )
+                        }
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setChartTrade(trade)}
+                            title="添加入场图"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:border-brand-300 hover:text-brand-600"
+                          >
+                            <LineChart className="h-3.5 w-3.5" />
+                            添加
+                          </button>
+                        )
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {trade.status === 'closed' ? <PnlBadge value={trade.pnl} /> : '-'}
@@ -137,6 +188,19 @@ export function TradesPage() {
           </table>
         </div>
       </div>
+
+      {chartTrade && (
+        <TradeEntryChartModal
+          trade={chartTrade}
+          onClose={() => setChartTrade(null)}
+          onSave={(entryCharts) => updateTrade(chartTrade.id, { entryCharts })}
+          onAddToPlaybook={() => {
+            createPlaybookFromTrade(chartTrade.id)
+            setChartTrade(null)
+          }}
+          inPlaybook={isTradeInPlaybook(chartTrade.id)}
+        />
+      )}
     </div>
   )
 }

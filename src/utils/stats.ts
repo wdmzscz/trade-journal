@@ -26,6 +26,10 @@ export function formatCurrency(value: number): string {
   return `${sign}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+export function formatQuantity(quantity: number): string {
+  return String(parseFloat(quantity.toFixed(3)))
+}
+
 export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`
 }

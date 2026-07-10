@@ -9,6 +9,7 @@ import {
   CalendarDays,
   LogOut,
   RefreshCw,
+  BookMarked,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { StorageInfo } from './StorageInfo'
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/trades', label: 'Trades', icon: List },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { to: '/playbook', label: 'Playbook', icon: BookMarked },
   { to: '/journal', label: 'Daily Journal', icon: BookOpen },
   { to: '/add-trade', label: 'Add Trade', icon: PlusCircle },
   { to: '/import', label: 'Import CSV', icon: Upload },

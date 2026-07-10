@@ -135,7 +135,12 @@ async function upsertProfile(
       : (existing?.nav_history ?? []),
   }
 
-  const { error } = await supabase.from('account_profiles').upsert(profile)
+  let { error } = await supabase.from('account_profiles').upsert(profile)
+  if (error && String(error.message).includes('nav_history')) {
+    const { nav_history: _nav, ...profileWithoutNav } = profile
+    const retry = await supabase.from('account_profiles').upsert(profileWithoutNav)
+    error = retry.error
+  }
   if (error) throw error
 }
 

@@ -1,5 +1,21 @@
-import { useState } from 'react'
+import { forwardRef, useMemo, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   Plus, X, LayoutGrid, TrendingUp, LineChart, Wallet, Upload,
   Pencil, Trash2, Settings2,
@@ -20,10 +36,15 @@ type ModalMode = 'add' | 'edit' | 'manage' | null
 export function AccountTabs() {
   const {
     selectedAccount, setSelectedAccount, accountInfos,
-    registerAccount, updateAccount, deleteAccount, journal,
+    registerAccount, updateAccount, deleteAccount, setAccountsOrder, journal,
   } = useTradeStore()
 
   const [modal, setModal] = useState<ModalMode>(null)
+  const sortable = accountInfos.length > 1
+  const accountIds = useMemo(() => accountInfos.map((account) => account.id), [accountInfos])
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  )
   const [editingAccount, setEditingAccount] = useState<AccountInfo | null>(null)
   const [formId, setFormId] = useState('')
   const [formLabel, setFormLabel] = useState('')
@@ -106,45 +127,64 @@ export function AccountTabs() {
     ? journal.filter((j) => j.account === editingAccount.id).length
     : 0
 
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = accountIds.indexOf(String(active.id))
+    const newIndex = accountIds.indexOf(String(over.id))
+    if (oldIndex < 0 || newIndex < 0) return
+    setAccountsOrder(arrayMove(accountIds, oldIndex, newIndex))
+  }
+
   return (
     <>
       <div className="sticky top-0 z-20 -mx-3 -mt-4 border-b border-slate-200 bg-[#e8eaed] px-2 sm:-mx-5 sm:px-3 lg:-mx-8 lg:-mt-8 lg:px-4">
-        <div className="flex items-end gap-1 overflow-x-auto pb-0 pt-3 scrollbar-thin">
-          <TabButton
-            active={selectedAccount === 'all'}
-            onClick={() => setSelectedAccount('all')}
-            icon={LayoutGrid}
-            title="全部账户"
-            subtitle={`${allTrades} 笔 · ${formatCurrency(allPnl)}`}
-            badge="汇总"
-            badgeColor="text-brand-600"
-          />
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToHorizontalAxis]}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex items-end gap-1 overflow-x-auto pb-0 pt-3 scrollbar-thin">
+            <TabButton
+              active={selectedAccount === 'all'}
+              onClick={() => setSelectedAccount('all')}
+              icon={LayoutGrid}
+              title="全部账户"
+              subtitle={`${allTrades} 笔 · ${formatCurrency(allPnl)}`}
+              badge="汇总"
+              badgeColor="text-brand-600"
+            />
 
-          {accountInfos.map((account) => {
-            const meta = TYPE_META[account.type]
-            return (
-              <TabButton
-                key={account.id}
-                active={selectedAccount === account.id}
-                onClick={() => setSelectedAccount(account.id)}
-                onEdit={(e) => openEdit(account, e)}
-                icon={meta.icon}
-                title={account.label}
-                subtitle={account.id !== account.label ? account.id : `${account.tradeCount} 笔`}
-                badge={meta.badge}
-                badgeColor={meta.color}
-                trailing={
-                  account.tradeCount > 0 ? (
-                    <span className={cn('text-[10px] font-semibold', (computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl) >= 0 ? 'text-emerald-600' : 'text-red-500')}>
-                      {formatCurrency(computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl)}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-400">无数据</span>
-                  )
-                }
-              />
-            )
-          })}
+            <SortableContext items={accountIds} strategy={horizontalListSortingStrategy}>
+              {accountInfos.map((account) => {
+                const meta = TYPE_META[account.type]
+                return (
+                  <SortableTabButton
+                    key={account.id}
+                    accountId={account.id}
+                    sortable={sortable}
+                    active={selectedAccount === account.id}
+                    onClick={() => setSelectedAccount(account.id)}
+                    onEdit={(e) => openEdit(account, e)}
+                    icon={meta.icon}
+                    title={account.label}
+                    subtitle={account.id !== account.label ? account.id : `${account.tradeCount} 笔`}
+                    badge={meta.badge}
+                    badgeColor={meta.color}
+                    trailing={
+                      account.tradeCount > 0 ? (
+                        <span className={cn('text-[10px] font-semibold', (computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl) >= 0 ? 'text-emerald-600' : 'text-red-500')}>
+                          {formatCurrency(computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl)}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">无数据</span>
+                      )
+                    }
+                  />
+                )
+              })}
+            </SortableContext>
 
           <button
             onClick={openAdd}
@@ -173,7 +213,8 @@ export function AccountTabs() {
               </button>
             </>
           )}
-        </div>
+          </div>
+        </DndContext>
       </div>
 
       {/* 添加账户 */}
@@ -327,17 +368,45 @@ export function AccountTabs() {
   )
 }
 
-function TabButton({
-  active,
-  onClick,
-  onEdit,
-  icon: Icon,
-  title,
-  subtitle,
-  badge,
-  badgeColor,
-  trailing,
-}: {
+function SortableTabButton({
+  accountId,
+  sortable,
+  ...props
+}: TabButtonProps & { accountId: string; sortable: boolean }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: accountId, disabled: !sortable })
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  return (
+    <TabButton
+      ref={setNodeRef}
+      style={style}
+      sortable={sortable}
+      isDragging={isDragging}
+      dragAttributes={sortable ? attributes : undefined}
+      dragListeners={sortable ? listeners : undefined}
+      {...props}
+      title={sortable ? `${props.title}（拖动可排序）` : props.title}
+    />
+  )
+}
+
+type TabButtonProps = {
+  sortable?: boolean
+  isDragging?: boolean
+  dragAttributes?: ReturnType<typeof useSortable>['attributes']
+  dragListeners?: ReturnType<typeof useSortable>['listeners']
+  style?: CSSProperties
   active: boolean
   onClick: () => void
   onEdit?: (e: React.MouseEvent) => void
@@ -347,12 +416,37 @@ function TabButton({
   badge: string
   badgeColor: string
   trailing?: React.ReactNode
-}) {
+}
+
+const TabButton = forwardRef<HTMLButtonElement, TabButtonProps>(function TabButton({
+  sortable,
+  isDragging,
+  dragAttributes,
+  dragListeners,
+  style,
+  active,
+  onClick,
+  onEdit,
+  icon: Icon,
+  title,
+  subtitle,
+  badge,
+  badgeColor,
+  trailing,
+}, ref) {
   return (
     <button
+      ref={ref}
+      type="button"
+      style={style}
+      {...dragAttributes}
+      {...dragListeners}
       onClick={onClick}
+      title={title}
       className={cn(
-        'group relative flex min-w-[108px] max-w-[160px] shrink-0 flex-col rounded-t-xl border px-3 py-2 sm:min-w-[140px] sm:max-w-[200px] sm:px-4 sm:py-2.5 text-left transition-all',
+        'group relative flex min-w-[108px] max-w-[160px] shrink-0 flex-col rounded-t-xl border px-3 py-2 sm:min-w-[140px] sm:max-w-[200px] sm:px-4 sm:py-2.5 text-left touch-none',
+        sortable && 'cursor-grab active:cursor-grabbing',
+        isDragging && 'z-30 cursor-grabbing shadow-lg',
         active
           ? 'z-10 border-slate-200 border-b-white bg-white shadow-[0_-1px_3px_rgba(0,0,0,0.04)]'
           : 'border-transparent bg-white/40 text-slate-600 hover:bg-white/70'
@@ -362,11 +456,12 @@ function TabButton({
         <span
           role="button"
           tabIndex={0}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={onEdit}
           onKeyDown={(e) => e.key === 'Enter' && onEdit(e as unknown as React.MouseEvent)}
           title="编辑账户"
           className={cn(
-            'absolute right-2 top-2 rounded-md p-0.5 transition-all',
+            'absolute right-2 top-2 rounded-md p-0.5 transition-colors',
             active
               ? 'text-slate-400 hover:bg-slate-100 hover:text-brand-600'
               : 'text-transparent group-hover:text-slate-400 group-hover:hover:bg-white/80 group-hover:hover:text-brand-600'
@@ -391,7 +486,7 @@ function TabButton({
       {active && <span className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full bg-brand-500" />}
     </button>
   )
-}
+})
 
 function TypePicker({ value, onChange }: { value: AccountType; onChange: (v: AccountType) => void }) {
   return (

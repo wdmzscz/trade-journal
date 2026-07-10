@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType } from '../types'
+import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType, PlaybookEntry } from '../types'
 import { calculateTradePnl, resolveStartingCapital } from '../utils/stats'
 import { mergeTrades } from '../utils/storage'
 import { mergeIbkrFinancials, type IbkrAccountFinancials } from '../utils/ibkrImport'
+import { mergePlaybookChartSlots, normalizeChartLinks } from '../utils/chartLinks'
 import { isCloudEnabled } from '../lib/supabase'
 import {
   fetchAllData,
@@ -17,16 +18,66 @@ import {
   deleteJournalByAccount,
   upsertProfile,
   deleteProfileCloud,
+  upsertPlaybookEntry,
+  deletePlaybookCloud,
   subscribeToChanges,
 } from '../lib/cloudSync'
 
 const TRADES_KEY = 'trade-journal-trades'
 const JOURNAL_KEY = 'trade-journal-journal'
 const ACCOUNT_KEY = 'trade-journal-selected-account'
+const ACCOUNT_ORDER_KEY = 'trade-journal-account-order'
 const PROFILES_KEY = 'trade-journal-account-profiles'
+const PLAYBOOK_KEY = 'trade-journal-playbook'
 
 function accountKey(userId?: string) {
   return userId ? `${ACCOUNT_KEY}-${userId}` : ACCOUNT_KEY
+}
+
+function accountOrderKey(userId?: string) {
+  return userId ? `${ACCOUNT_ORDER_KEY}-${userId}` : ACCOUNT_ORDER_KEY
+}
+
+function loadAccountOrder(userId?: string): string[] {
+  try {
+    const raw = localStorage.getItem(accountOrderKey(userId))
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function collectAccountIds(trades: Trade[], accountProfiles: AccountProfile[]): string[] {
+  const ids = new Set<string>()
+  accountProfiles.forEach((p) => ids.add(p.id))
+  trades.forEach((t) => ids.add(t.account))
+  const hasRealIbkrData = trades.some((t) => t.account !== 'IBKR')
+  return [...ids].filter((id) => {
+    if (id !== 'IBKR' || !hasRealIbkrData) return true
+    return trades.some((t) => t.account === 'IBKR')
+  })
+}
+
+function applyAccountOrder(allIds: string[], savedOrder: string[]): string[] {
+  const idSet = new Set(allIds)
+  const ordered: string[] = []
+  for (const id of savedOrder) {
+    if (idSet.has(id)) ordered.push(id)
+  }
+  for (const id of allIds) {
+    if (!ordered.includes(id)) ordered.push(id)
+  }
+  return ordered
+}
+
+function reorderAccountIds(order: string[], fromId: string, toId: string): string[] {
+  const fromIdx = order.indexOf(fromId)
+  const toIdx = order.indexOf(toId)
+  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return order
+  const next = [...order]
+  next.splice(fromIdx, 1)
+  next.splice(toIdx, 0, fromId)
+  return next
 }
 
 function loadTrades(): Trade[] {
@@ -41,6 +92,15 @@ function loadTrades(): Trade[] {
 function loadJournal(): JournalEntry[] {
   try {
     const raw = localStorage.getItem(JOURNAL_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function loadPlaybook(): PlaybookEntry[] {
+  try {
+    const raw = localStorage.getItem(PLAYBOOK_KEY)
     return raw ? JSON.parse(raw) : []
   } catch {
     return []
@@ -136,17 +196,27 @@ interface TradeStoreContextValue {
     totalDeposits?: number
   }) => void
   deleteAccount: (id: string) => void
+  reorderAccounts: (fromId: string, toId: string) => void
+  setAccountsOrder: (orderedIds: string[]) => void
   addTrade: (trade: Omit<Trade, 'id' | 'createdAt' | 'updatedAt' | 'pnl'> & { pnl?: number }) => void
   updateTrade: (id: string, updates: Partial<Trade>) => void
   deleteTrade: (id: string) => void
   importTrades: (trades: Trade[], options?: {
     replaceAccount?: string
     accountFinancials?: IbkrAccountFinancials
+    accountFinancialsMap?: Record<string, IbkrAccountFinancials>
     accountLabel?: string
+    accountLabels?: Record<string, string>
   }) => { added: number; skipped: number; replaced: boolean }
   saveJournal: (entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void
   deleteJournal: (id: string) => void
   getJournalByDate: (date: string) => JournalEntry | undefined
+  playbook: PlaybookEntry[]
+  filteredPlaybook: PlaybookEntry[]
+  savePlaybookEntry: (entry: Omit<PlaybookEntry, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void
+  deletePlaybookEntry: (id: string) => void
+  createPlaybookFromTrade: (tradeId: string) => string | null
+  isTradeInPlaybook: (tradeId: string) => boolean
   accounts: string[]
   syncStatus: SyncStatus
   cloudEnabled: boolean
@@ -177,6 +247,8 @@ export function TradeStoreProvider({
     cloudEnabled ? [] : loadProfiles()
   )
   const [selectedAccount, setSelectedAccountState] = useState<string>(() => loadSelectedAccount(userId))
+  const [accountOrder, setAccountOrder] = useState<string[]>(() => loadAccountOrder(userId))
+  const [playbook, setPlaybook] = useState<PlaybookEntry[]>(() => (cloudEnabled ? [] : loadPlaybook()))
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloudEnabled ? 'loading' : 'idle')
   const [cloudReady, setCloudReady] = useState(!cloudEnabled)
 
@@ -187,6 +259,7 @@ export function TradeStoreProvider({
       setTrades(data.trades)
       setJournal(data.journal)
       setAccountProfiles(data.profiles)
+      setPlaybook(data.playbook)
       setSelectedAccountState((current) => reconcileSelectedAccount(current, data.trades))
       setSyncStatus('idle')
     } catch {
@@ -204,17 +277,19 @@ export function TradeStoreProvider({
       try {
         let data = await fetchAllData(userId!)
 
-        if (data.trades.length === 0 && data.journal.length === 0 && data.profiles.length === 0) {
+        if (data.trades.length === 0 && data.journal.length === 0 && data.profiles.length === 0 && data.playbook.length === 0) {
           const localTrades = loadTrades()
           const localJournal = loadJournal()
           const localProfiles = loadProfiles()
-          if (localTrades.length > 0 || localJournal.length > 0 || localProfiles.length > 0) {
+          const localPlaybook = loadPlaybook()
+          if (localTrades.length > 0 || localJournal.length > 0 || localProfiles.length > 0 || localPlaybook.length > 0) {
             await uploadAllData(userId!, {
               trades: localTrades,
               journal: localJournal,
               profiles: localProfiles,
+              playbook: localPlaybook,
             })
-            data = { trades: localTrades, journal: localJournal, profiles: localProfiles }
+            data = { trades: localTrades, journal: localJournal, profiles: localProfiles, playbook: localPlaybook }
           }
         }
 
@@ -222,6 +297,7 @@ export function TradeStoreProvider({
           setTrades(data.trades)
           setJournal(data.journal)
           setAccountProfiles(data.profiles)
+          setPlaybook(data.playbook)
           setSelectedAccountState((current) => reconcileSelectedAccount(current, data.trades))
           setSyncStatus('idle')
           setCloudReady(true)
@@ -268,6 +344,15 @@ export function TradeStoreProvider({
     localStorage.setItem(accountKey(userId), selectedAccount)
   }, [selectedAccount, userId])
 
+  useEffect(() => {
+    if (!cloudReady) return
+    localStorage.setItem(PLAYBOOK_KEY, JSON.stringify(playbook))
+  }, [playbook, cloudReady])
+
+  useEffect(() => {
+    localStorage.setItem(accountOrderKey(userId), JSON.stringify(accountOrder))
+  }, [accountOrder, userId])
+
   const cloudWrite = useCallback(async (fn: () => Promise<void>) => {
     if (!cloudEnabled || !userIdRef.current) return
     setSyncStatus('syncing')
@@ -287,6 +372,7 @@ export function TradeStoreProvider({
     const trimmedId = id.trim()
     if (!trimmedId) return
     const now = new Date().toISOString()
+    let isNew = false
 
     setAccountProfiles((prev) => {
       const existing = prev.find((p) => p.id === trimmedId)
@@ -294,6 +380,7 @@ export function TradeStoreProvider({
       if (existing) {
         profile = { ...existing, label: label.trim() || trimmedId, type }
       } else {
+        isNew = true
         profile = { id: trimmedId, label: label.trim() || trimmedId, type, createdAt: now }
       }
 
@@ -306,6 +393,10 @@ export function TradeStoreProvider({
       }
       return [...prev, profile]
     })
+
+    if (isNew) {
+      setAccountOrder((order) => (order.includes(trimmedId) ? order : [...order, trimmedId]))
+    }
     setSelectedAccountState(trimmedId)
   }, [cloudEnabled, cloudWrite])
 
@@ -353,6 +444,7 @@ export function TradeStoreProvider({
 
   const deleteAccount = useCallback((id: string) => {
     setAccountProfiles((prev) => prev.filter((p) => p.id !== id))
+    setAccountOrder((prev) => prev.filter((accountId) => accountId !== id))
     setTrades((prev) => prev.filter((t) => t.account !== id))
     setJournal((prev) => prev.filter((j) => j.account !== id))
     setSelectedAccountState((current) => (current === id ? 'all' : current))
@@ -367,6 +459,25 @@ export function TradeStoreProvider({
     }
   }, [cloudEnabled, cloudWrite])
 
+  const reorderAccounts = useCallback((fromId: string, toId: string) => {
+    if (fromId === toId) return
+    setAccountOrder((prev) => {
+      const rawIds = collectAccountIds(trades, accountProfiles)
+      const merged = applyAccountOrder(rawIds, prev)
+      return reorderAccountIds(merged, fromId, toId)
+    })
+  }, [trades, accountProfiles])
+
+  const setAccountsOrder = useCallback((orderedIds: string[]) => {
+    const rawIds = collectAccountIds(trades, accountProfiles)
+    const idSet = new Set(rawIds)
+    const next = orderedIds.filter((id) => idSet.has(id))
+    for (const id of rawIds) {
+      if (!next.includes(id)) next.push(id)
+    }
+    setAccountOrder(next)
+  }, [trades, accountProfiles])
+
   const filteredTrades = useMemo(() => {
     if (selectedAccount === 'all') return trades
     return trades.filter((t) => t.account === selectedAccount)
@@ -377,18 +488,15 @@ export function TradeStoreProvider({
     return journal.filter((j) => j.account === selectedAccount)
   }, [journal, selectedAccount])
 
+  const filteredPlaybook = useMemo(() => {
+    if (selectedAccount === 'all') return playbook
+    return playbook.filter((p) => p.account === selectedAccount)
+  }, [playbook, selectedAccount])
+
   const accounts = useMemo(() => {
-    const ids = new Set<string>()
-    accountProfiles.forEach((p) => ids.add(p.id))
-    trades.forEach((t) => ids.add(t.account))
-    const hasRealIbkrData = trades.some((t) => t.account !== 'IBKR')
-    return [...ids]
-      .filter((id) => {
-        if (id !== 'IBKR' || !hasRealIbkrData) return true
-        return trades.some((t) => t.account === 'IBKR')
-      })
-      .sort()
-  }, [trades, accountProfiles])
+    const rawIds = collectAccountIds(trades, accountProfiles)
+    return applyAccountOrder(rawIds, accountOrder)
+  }, [trades, accountProfiles, accountOrder])
 
   const accountInfos = useMemo((): AccountInfo[] => {
     return accounts.map((id) => {
@@ -461,42 +569,54 @@ export function TradeStoreProvider({
   const importTrades = useCallback((newTrades: Trade[], options?: {
     replaceAccount?: string
     accountFinancials?: IbkrAccountFinancials
+    accountFinancialsMap?: Record<string, IbkrAccountFinancials>
     accountLabel?: string
+    accountLabels?: Record<string, string>
   }) => {
     const accountId = options?.replaceAccount ?? newTrades[0]?.account
     const isReplace = Boolean(options?.replaceAccount)
+    const touchedAccounts = [...new Set(newTrades.map((t) => t.account))]
 
-    if (accountId) {
-      const accountTrades = newTrades.filter((t) => t.account === accountId)
+    if (touchedAccounts.length > 0) {
       setAccountProfiles((prev) => {
-        const existing = prev.find((p) => p.id === accountId)
-        const type = inferAccountType(accountTrades)
-        const label =
-          existing?.label && existing.label !== accountId
-            ? existing.label
-            : (options?.accountLabel ?? 'IBKR')
-        let profile: AccountProfile = existing ?? {
-          id: accountId,
-          label,
-          type,
-          createdAt: new Date().toISOString(),
-        }
-        if (!existing) {
-          profile.label = label
-        }
+        let next = [...prev]
+        for (const touchedId of touchedAccounts) {
+          const accountTrades = newTrades.filter((t) => t.account === touchedId)
+          const financials =
+            options?.accountFinancialsMap?.[touchedId] ??
+            (touchedId === accountId ? options?.accountFinancials : undefined)
+          const label =
+            options?.accountLabels?.[touchedId] ??
+            (touchedId === accountId ? options?.accountLabel : undefined)
 
-        if (options?.accountFinancials) {
-          profile = applyFinancialsToProfile(profile, options.accountFinancials)
+          const existing = next.find((p) => p.id === touchedId)
+          const type = inferAccountType(accountTrades)
+          const resolvedLabel =
+            existing?.label && existing.label !== touchedId
+              ? existing.label
+              : (label ?? (touchedId === accountId ? 'IBKR' : touchedId))
+          let profile: AccountProfile = existing ?? {
+            id: touchedId,
+            label: resolvedLabel,
+            type,
+            createdAt: new Date().toISOString(),
+          }
+          if (!existing) {
+            profile.label = resolvedLabel
+          }
+          if (financials) {
+            profile = applyFinancialsToProfile(profile, financials)
+          }
+          if (cloudEnabled && userIdRef.current) {
+            cloudWrite(() => upsertProfile(userIdRef.current!, profile))
+          }
+          if (existing) {
+            next = next.map((p) => (p.id === touchedId ? profile : p))
+          } else {
+            next = [...next, profile]
+          }
         }
-
-        if (cloudEnabled && userIdRef.current) {
-          cloudWrite(() => upsertProfile(userIdRef.current!, profile))
-        }
-
-        if (existing) {
-          return prev.map((p) => (p.id === accountId ? profile : p))
-        }
-        return [...prev, profile]
+        return next
       })
     }
 
@@ -567,15 +687,111 @@ export function TradeStoreProvider({
   }, [cloudEnabled, cloudWrite])
 
   const getJournalByDate = useCallback(
-    (date: string, account?: string) => {
-      const scope = account ?? selectedAccount
-      if (scope === 'all') {
+    (date: string) => {
+      if (selectedAccount === 'all') {
         return journal.find((j) => j.date === date)
       }
-      return journal.find((j) => j.date === date && j.account === scope)
+      return journal.find((j) => j.date === date && j.account === selectedAccount)
     },
     [journal, selectedAccount]
   )
+
+  const isTradeInPlaybook = useCallback(
+    (tradeId: string) => playbook.some((p) => p.tradeId === tradeId),
+    [playbook]
+  )
+
+  const savePlaybookEntry = useCallback((input: Omit<PlaybookEntry, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+    const now = new Date().toISOString()
+    let savedEntry: PlaybookEntry | null = null
+
+    setPlaybook((prev) => {
+      const existing = input.id ? prev.find((p) => p.id === input.id) : undefined
+      const entry: PlaybookEntry = {
+        ...input,
+        id: existing?.id ?? uuidv4(),
+        charts: normalizeChartLinks(input.charts),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      }
+      savedEntry = entry
+
+      if (entry.tradeId) {
+        setTrades((trades) =>
+          trades.map((t) => (t.id === entry.tradeId ? { ...t, playbookId: entry.id, updatedAt: now } : t))
+        )
+      }
+
+      if (existing) {
+        return prev.map((p) => (p.id === existing.id ? entry : p))
+      }
+      return [entry, ...prev]
+    })
+
+    if (cloudEnabled && userIdRef.current && savedEntry) {
+      const entry = savedEntry
+      cloudWrite(() => upsertPlaybookEntry(userIdRef.current!, entry))
+    }
+  }, [cloudEnabled, cloudWrite])
+
+  const deletePlaybookEntry = useCallback((id: string) => {
+    setPlaybook((prev) => prev.filter((p) => p.id !== id))
+    setTrades((prev) =>
+      prev.map((t) => (t.playbookId === id ? { ...t, playbookId: undefined, updatedAt: new Date().toISOString() } : t))
+    )
+
+    if (cloudEnabled && userIdRef.current) {
+      cloudWrite(() => deletePlaybookCloud(userIdRef.current!, id))
+    }
+  }, [cloudEnabled, cloudWrite])
+
+  const createPlaybookFromTrade = useCallback((tradeId: string) => {
+    const trade = trades.find((t) => t.id === tradeId)
+    if (!trade) return null
+    if (playbook.some((p) => p.tradeId === tradeId)) {
+      return playbook.find((p) => p.tradeId === tradeId)?.id ?? null
+    }
+
+    const now = new Date().toISOString()
+    const entryCharts = normalizeChartLinks(trade.entryCharts)
+    const charts = entryCharts.length > 0
+      ? mergePlaybookChartSlots([
+          { timeframe: 'E', url: entryCharts[0]?.url ?? '', note: entryCharts[0]?.note },
+          ...entryCharts.slice(1),
+        ])
+      : mergePlaybookChartSlots()
+
+    const entry: PlaybookEntry = {
+      id: uuidv4(),
+      tradeId: trade.id,
+      symbol: trade.symbol,
+      side: trade.side,
+      account: trade.account,
+      entryDate: trade.entryDate,
+      exitDate: trade.exitDate,
+      entryPrice: trade.entryPrice,
+      exitPrice: trade.exitPrice,
+      pnl: trade.pnl,
+      setup: trade.setup,
+      title: `${trade.symbol} ${trade.setup ?? '盈利案例'}`,
+      thesis: trade.notes,
+      journalDate: trade.entryDate.slice(0, 10),
+      charts,
+      tags: [...trade.tags, 'playbook'],
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    setPlaybook((prev) => [entry, ...prev])
+    setTrades((prev) =>
+      prev.map((t) => (t.id === tradeId ? { ...t, playbookId: entry.id, updatedAt: now } : t))
+    )
+
+    if (cloudEnabled && userIdRef.current) {
+      cloudWrite(() => upsertPlaybookEntry(userIdRef.current!, entry))
+    }
+    return entry.id
+  }, [trades, playbook, cloudEnabled, cloudWrite])
 
   if (cloudEnabled && !cloudReady) {
     return (
@@ -603,6 +819,8 @@ export function TradeStoreProvider({
         registerAccount,
         updateAccount,
         deleteAccount,
+        reorderAccounts,
+        setAccountsOrder,
         addTrade,
         updateTrade,
         deleteTrade,
@@ -610,6 +828,12 @@ export function TradeStoreProvider({
         saveJournal,
         deleteJournal,
         getJournalByDate,
+        playbook,
+        filteredPlaybook,
+        savePlaybookEntry,
+        deletePlaybookEntry,
+        createPlaybookFromTrade,
+        isTradeInPlaybook,
         accounts,
         syncStatus,
         cloudEnabled,

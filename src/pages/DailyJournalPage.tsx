@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -19,9 +20,18 @@ const EMPTY_FORM = {
 
 export function DailyJournalPage() {
   const { filteredTrades, filteredJournal, selectedAccount, saveJournal, getJournalByDate } = useTradeStore()
+  const [searchParams] = useSearchParams()
   const [currentMonth, setCurrentMonth] = useState(new Date())
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [selectedDate, setSelectedDate] = useState(() => searchParams.get('date') ?? format(new Date(), 'yyyy-MM-dd'))
   const [form, setForm] = useState(EMPTY_FORM)
+
+  useEffect(() => {
+    const dateParam = searchParams.get('date')
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      setSelectedDate(dateParam)
+      setCurrentMonth(parseISO(dateParam))
+    }
+  }, [searchParams])
 
   const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const pnlMap = useMemo(() => new Map(dailyPnl.map((d) => [d.date, d])), [dailyPnl])

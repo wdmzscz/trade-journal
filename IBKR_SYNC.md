@@ -96,3 +96,25 @@ supabase functions deploy sync-ibkr
    supabase functions deploy sync-ibkr
    ```
 4. 仍失败时，到 Supabase Dashboard → **Edge Functions** → **sync-ibkr** → **Logs** 查看具体报错
+
+### `Could not find the 'nav_history' column`
+
+云端数据库是旧版 schema，缺 `nav_history` 列。在 Supabase **SQL Editor** 执行：
+
+```sql
+alter table account_profiles add column if not exists nav_history jsonb default '[]';
+```
+
+执行成功后重新点 **立即同步**。该列用于 Calendar 每日收益率（NAV 分母）。
+
+### `Statement is not available`（错误码 1003）
+
+IBKR 表示**该 Flex Query 当前无法生成报表**，常见原因：
+
+1. **Query ID 填错** — 在 Client Portal → Flex Queries 重新复制 ID（你之前用的是 `1567193`）
+2. **不是 Activity Flex Query** — 必须是 **Activity Flex Query**，旧版 Legacy 已停用（错误 1010）
+3. **查询未启用 Web Service** — Flex Web Service Configuration 里已 Enable，且 Token 未过期
+4. **日期范围无数据** — 日期选 **Last 365 Calendar Days**（或更长）
+5. **先在网页验证** — 在 Flex Queries 里对该查询点 **Run / Preview**，能下载 CSV 后再同步
+
+若 Portal 里手动 Run 也失败，需在 IBKR 里编辑该 Query 的 section 或日期范围。

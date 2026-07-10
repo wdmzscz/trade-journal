@@ -44,6 +44,47 @@ export interface AccountInfo {
   totalDeposits?: number
 }
 
+export interface ChartLink {
+  timeframe: string
+  url: string
+  note?: string
+}
+
+/** Playbook 三周期：E Entry · V Validation · C Context（周期不固定，仅作槽位） */
+export const PLAYBOOK_TIMEFRAMES = ['E', 'V', 'C'] as const
+
+export const PLAYBOOK_SLOT_LABELS: Record<(typeof PLAYBOOK_TIMEFRAMES)[number], string> = {
+  E: 'Entry',
+  V: 'Validation',
+  C: 'Context',
+}
+
+export function emptyPlaybookCharts(): ChartLink[] {
+  return PLAYBOOK_TIMEFRAMES.map((timeframe) => ({ timeframe, url: '' }))
+}
+
+export interface PlaybookEntry {
+  id: string
+  tradeId?: string
+  symbol: string
+  side: TradeSide
+  account: string
+  entryDate: string
+  exitDate?: string
+  entryPrice: number
+  exitPrice?: number
+  pnl?: number
+  setup?: string
+  title: string
+  thesis?: string
+  lessons?: string
+  journalDate?: string
+  charts: ChartLink[]
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Trade {
   id: string
   symbol: string
@@ -61,6 +102,9 @@ export interface Trade {
   setup?: string
   tags: string[]
   notes?: string
+  /** TradingView 入场图链接（轻量，不占本地存储空间） */
+  entryCharts?: ChartLink[]
+  playbookId?: string
   account: string
   createdAt: string
   updatedAt: string

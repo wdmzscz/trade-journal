@@ -20,6 +20,9 @@ export function ImportCsvPage() {
   const [detectedAccount, setDetectedAccount] = useState<string | null>(null)
   const [detectedAccountLabel, setDetectedAccountLabel] = useState<string | null>(null)
   const [detectedFinancials, setDetectedFinancials] = useState<IbkrAccountFinancials | null>(null)
+  const [detectedFinancialsMap, setDetectedFinancialsMap] = useState<Record<string, IbkrAccountFinancials> | null>(null)
+  const [detectedAccountLabels, setDetectedAccountLabels] = useState<Record<string, string> | null>(null)
+  const [detectedAccounts, setDetectedAccounts] = useState<Array<{ id: string; label: string; tradeCount: number }> | null>(null)
   /** merge=追加去重（默认）；replace=替换该账户全部记录 */
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
 
@@ -35,6 +38,9 @@ export function ImportCsvPage() {
     setDetectedAccount(result.account ?? null)
     setDetectedAccountLabel(result.accountLabel ?? null)
     setDetectedFinancials(result.accountFinancials ?? null)
+    setDetectedFinancialsMap(result.accountFinancialsMap ?? null)
+    setDetectedAccountLabels(result.accountLabels ?? null)
+    setDetectedAccounts(result.accounts ?? null)
     setImportResult(null)
   }, [])
 
@@ -55,7 +61,9 @@ export function ImportCsvPage() {
     const result = importTrades(preview, {
       replaceAccount: importMode === 'replace' && detectedAccount ? detectedAccount : undefined,
       accountFinancials: detectedFinancials ?? undefined,
+      accountFinancialsMap: detectedFinancialsMap ?? undefined,
       accountLabel: detectedAccountLabel ?? undefined,
+      accountLabels: detectedAccountLabels ?? undefined,
     })
     if (detectedAccount) {
       setSelectedAccount(detectedAccount)
@@ -66,6 +74,9 @@ export function ImportCsvPage() {
     setDetectedAccount(null)
     setDetectedAccountLabel(null)
     setDetectedFinancials(null)
+    setDetectedFinancialsMap(null)
+    setDetectedAccountLabels(null)
+    setDetectedAccounts(null)
   }
 
   const totalPnl = preview.filter((t) => t.status === 'closed').reduce((s, t) => s + t.pnl, 0)
@@ -77,7 +88,7 @@ export function ImportCsvPage() {
         <div>
           <h1 className="page-title">Import CSV</h1>
           <p className="page-subtitle">
-            支持 TradeZella 通用格式，以及 Interactive Brokers (IBKR) 活动账单
+            支持 TradeZella 通用格式、IBKR 活动账单、Fidelity 账户历史
           </p>
         </div>
         <Link
@@ -128,8 +139,8 @@ export function ImportCsvPage() {
             <FileText className="h-5 w-5" />
           </div>
           <div>
-            <p className="font-semibold text-slate-900">IBKR 活动账单</p>
-            <p className="text-xs text-slate-500">自动识别账户，配对期货开/平仓</p>
+            <p className="font-semibold text-slate-900">券商账单自动识别</p>
+            <p className="text-xs text-slate-500">IBKR / Fidelity 等格式自动配对开平仓</p>
           </div>
         </div>
       </div>
@@ -144,7 +155,7 @@ export function ImportCsvPage() {
       >
         <Upload className="mx-auto h-10 w-10 text-slate-400" />
         <p className="mt-3 text-sm font-medium text-slate-700">拖拽 CSV 文件到此处</p>
-        <p className="mt-1 text-xs text-slate-400">支持 IBKR 活动账单 或 TradeZella 格式</p>
+        <p className="mt-1 text-xs text-slate-400">支持 IBKR、Fidelity 或 TradeZella 格式</p>
         <label className="mt-4 inline-flex min-h-[44px] cursor-pointer items-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
           选择文件
           <input type="file" accept=".csv" onChange={onFileSelect} className="hidden" />
@@ -170,6 +181,26 @@ export function ImportCsvPage() {
               </div>
             </label>
           </div>
+        </div>
+      )}
+
+      {format === 'fidelity' && preview.length > 0 && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">
+          <p className="font-semibold">已识别为 Fidelity 账户历史</p>
+          <p className="mt-1 break-words">
+            主账户：<strong>{detectedAccount}</strong>（{detectedAccountLabel}）· {preview.filter((t) => t.account === detectedAccount).length} 笔已平仓
+          </p>
+          {detectedAccounts && detectedAccounts.length > 1 && (
+            <p className="mt-2 text-violet-800">
+              共 {detectedAccounts.length} 个账户：
+              {detectedAccounts.map((a) => ` ${a.label}(${a.tradeCount}笔)`).join(' ·')}
+            </p>
+          )}
+          {detectedFinancials?.totalDeposits ? (
+            <p className="mt-2 text-violet-800">
+              检测到入金 {formatCurrency(detectedFinancials.totalDeposits)}
+            </p>
+          ) : null}
         </div>
       )}
 

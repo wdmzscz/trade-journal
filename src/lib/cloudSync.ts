@@ -1,11 +1,12 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import type { Trade, JournalEntry, AccountProfile, AccountCashFlow } from '../types'
+import type { Trade, JournalEntry, AccountProfile, AccountCashFlow, PlaybookEntry } from '../types'
 import { getSupabase } from './supabase'
 
 export type CloudData = {
   trades: Trade[]
   journal: JournalEntry[]
   profiles: AccountProfile[]
+  playbook: PlaybookEntry[]
 }
 
 interface TradeRow {
@@ -26,7 +27,32 @@ interface TradeRow {
   setup: string | null
   tags: string[]
   notes: string | null
+  entry_charts: Trade['entryCharts'] | null
+  playbook_id: string | null
   account: string
+  created_at: string
+  updated_at: string
+}
+
+interface PlaybookRow {
+  id: string
+  user_id: string
+  trade_id: string | null
+  symbol: string
+  side: string
+  account: string
+  entry_date: string
+  exit_date: string | null
+  entry_price: number
+  exit_price: number | null
+  pnl: number | null
+  setup: string | null
+  title: string
+  thesis: string | null
+  lessons: string | null
+  journal_date: string | null
+  charts: PlaybookEntry['charts']
+  tags: string[]
   created_at: string
   updated_at: string
 }
@@ -79,6 +105,8 @@ function rowToTrade(row: TradeRow): Trade {
     setup: row.setup ?? undefined,
     tags: row.tags ?? [],
     notes: row.notes ?? undefined,
+    entryCharts: row.entry_charts ?? undefined,
+    playbookId: row.playbook_id ?? undefined,
     account: row.account,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -104,9 +132,60 @@ function tradeToRow(trade: Trade, userId: string): TradeRow {
     setup: trade.setup ?? null,
     tags: trade.tags,
     notes: trade.notes ?? null,
+    entry_charts: trade.entryCharts ?? null,
+    playbook_id: trade.playbookId ?? null,
     account: trade.account,
     created_at: trade.createdAt,
     updated_at: trade.updatedAt,
+  }
+}
+
+function rowToPlaybook(row: PlaybookRow): PlaybookEntry {
+  return {
+    id: row.id,
+    tradeId: row.trade_id ?? undefined,
+    symbol: row.symbol,
+    side: row.side as PlaybookEntry['side'],
+    account: row.account,
+    entryDate: row.entry_date,
+    exitDate: row.exit_date ?? undefined,
+    entryPrice: Number(row.entry_price),
+    exitPrice: row.exit_price != null ? Number(row.exit_price) : undefined,
+    pnl: row.pnl != null ? Number(row.pnl) : undefined,
+    setup: row.setup ?? undefined,
+    title: row.title,
+    thesis: row.thesis ?? undefined,
+    lessons: row.lessons ?? undefined,
+    journalDate: row.journal_date ?? undefined,
+    charts: row.charts ?? [],
+    tags: row.tags ?? [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function playbookToRow(entry: PlaybookEntry, userId: string): PlaybookRow {
+  return {
+    id: entry.id,
+    user_id: userId,
+    trade_id: entry.tradeId ?? null,
+    symbol: entry.symbol,
+    side: entry.side,
+    account: entry.account,
+    entry_date: entry.entryDate,
+    exit_date: entry.exitDate ?? null,
+    entry_price: entry.entryPrice,
+    exit_price: entry.exitPrice ?? null,
+    pnl: entry.pnl ?? null,
+    setup: entry.setup ?? null,
+    title: entry.title,
+    thesis: entry.thesis ?? null,
+    lessons: entry.lessons ?? null,
+    journal_date: entry.journalDate ?? null,
+    charts: entry.charts,
+    tags: entry.tags,
+    created_at: entry.createdAt,
+    updated_at: entry.updatedAt,
   }
 }
 
@@ -179,20 +258,23 @@ function profileToRow(profile: AccountProfile, userId: string): ProfileRow {
 export async function fetchAllData(userId: string): Promise<CloudData> {
   const supabase = getSupabase()
 
-  const [tradesRes, journalRes, profilesRes] = await Promise.all([
+  const [tradesRes, journalRes, profilesRes, playbookRes] = await Promise.all([
     supabase.from('trades').select('*').eq('user_id', userId),
     supabase.from('journal_entries').select('*').eq('user_id', userId),
     supabase.from('account_profiles').select('*').eq('user_id', userId),
+    supabase.from('playbook_entries').select('*').eq('user_id', userId),
   ])
 
   if (tradesRes.error) throw tradesRes.error
   if (journalRes.error) throw journalRes.error
   if (profilesRes.error) throw profilesRes.error
+  if (playbookRes.error) throw playbookRes.error
 
   return {
     trades: (tradesRes.data as TradeRow[]).map(rowToTrade),
     journal: (journalRes.data as JournalRow[]).map(rowToJournal),
     profiles: (profilesRes.data as ProfileRow[]).map(rowToProfile),
+    playbook: (playbookRes.data as PlaybookRow[]).map(rowToPlaybook),
   }
 }
 
@@ -219,6 +301,13 @@ export async function uploadAllData(userId: string, data: CloudData): Promise<vo
     const { error } = await supabase
       .from('journal_entries')
       .upsert(data.journal.map((j) => journalToRow(j, userId)))
+    if (error) throw error
+  }
+
+  if (data.playbook.length > 0) {
+    const { error } = await supabase
+      .from('playbook_entries')
+      .upsert(data.playbook.map((p) => playbookToRow(p, userId)))
     if (error) throw error
   }
 }
@@ -291,6 +380,20 @@ export async function deleteProfileCloud(userId: string, accountId: string): Pro
   if (error) throw error
 }
 
+export async function upsertPlaybookEntry(userId: string, entry: PlaybookEntry): Promise<void> {
+  const { error } = await getSupabase().from('playbook_entries').upsert(playbookToRow(entry, userId))
+  if (error) throw error
+}
+
+export async function deletePlaybookCloud(userId: string, id: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from('playbook_entries')
+    .delete()
+    .eq('user_id', userId)
+    .eq('id', id)
+  if (error) throw error
+}
+
 export function subscribeToChanges(
   userId: string,
   onChange: () => void
@@ -318,6 +421,11 @@ export function subscribeToChanges(
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'account_profiles', filter: `user_id=eq.${userId}` },
+      schedule
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'playbook_entries', filter: `user_id=eq.${userId}` },
       schedule
     )
     .subscribe()
