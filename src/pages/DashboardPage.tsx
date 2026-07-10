@@ -72,17 +72,19 @@ export function DashboardPage() {
             icon={<DollarSign className="h-5 w-5" />}
           />
         )}
-        <StatCard
-          title={accountReturn != null ? '交易盈亏合计' : '总盈亏 (P&L)'}
-          value={formatCurrency(stats.totalPnl)}
-          trend={stats.totalPnl >= 0 ? 'up' : 'down'}
-          subtitle={
-            accountReturn != null
-              ? `${stats.closedTrades} 笔已平仓 · 全部平仓时应与账户总盈亏一致`
-              : `${stats.closedTrades} 笔已平仓交易`
-          }
-          icon={<Activity className="h-5 w-5" />}
-        />
+        {(selectedAccount === 'all' || accountReturn == null) && (
+          <StatCard
+            title={accountReturn != null && selectedAccount === 'all' ? '交易盈亏合计' : '总盈亏 (P&L)'}
+            value={formatCurrency(stats.totalPnl)}
+            trend={stats.totalPnl >= 0 ? 'up' : 'down'}
+            subtitle={
+              accountReturn != null && selectedAccount === 'all'
+                ? `${stats.closedTrades} 笔已平仓 · 全部平仓时应与账户总盈亏一致`
+                : `${stats.closedTrades} 笔已平仓交易`
+            }
+            icon={<Activity className="h-5 w-5" />}
+          />
+        )}
         <StatCard
           title="胜率"
           value={formatPercent(stats.winRate)}
