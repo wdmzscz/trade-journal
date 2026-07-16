@@ -397,7 +397,6 @@ function SortableTabButton({
       dragListeners={sortable ? listeners : undefined}
       {...props}
       title={props.title}
-      tip={sortable ? `${props.title}（拖动可排序）` : props.title}
     />
   )
 }
@@ -413,7 +412,6 @@ type TabButtonProps = {
   onEdit?: (e: React.MouseEvent) => void
   icon: typeof TrendingUp
   title: string
-  tip?: string
   subtitle: string
   badge: string
   badgeColor: string
@@ -431,7 +429,6 @@ const TabButton = forwardRef<HTMLButtonElement, TabButtonProps>(function TabButt
   onEdit,
   icon: Icon,
   title,
-  tip,
   subtitle,
   badge,
   badgeColor,
@@ -445,7 +442,7 @@ const TabButton = forwardRef<HTMLButtonElement, TabButtonProps>(function TabButt
       {...dragAttributes}
       {...dragListeners}
       onClick={onClick}
-      title={tip ?? title}
+      title={title}
       className={cn(
         'group relative flex min-w-[108px] max-w-[160px] shrink-0 flex-col rounded-t-xl border px-3 py-2 sm:min-w-[140px] sm:max-w-[200px] sm:px-4 sm:py-2.5 text-left touch-none',
         sortable && 'cursor-grab active:cursor-grabbing',

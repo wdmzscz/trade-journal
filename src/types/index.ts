@@ -81,6 +81,8 @@ export interface PlaybookEntry {
   journalDate?: string
   charts: ChartLink[]
   tags: string[]
+  /** 置顶收藏，始终排在时间排序之前 */
+  pinned?: boolean
   createdAt: string
   updatedAt: string
 }

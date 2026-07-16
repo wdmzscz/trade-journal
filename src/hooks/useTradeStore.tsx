@@ -215,6 +215,7 @@ interface TradeStoreContextValue {
   filteredPlaybook: PlaybookEntry[]
   savePlaybookEntry: (entry: Omit<PlaybookEntry, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void
   deletePlaybookEntry: (id: string) => void
+  togglePlaybookPinned: (id: string) => void
   createPlaybookFromTrade: (tradeId: string) => string | null
   isTradeInPlaybook: (tradeId: string) => boolean
   accounts: string[]
@@ -711,6 +712,7 @@ export function TradeStoreProvider({
         ...input,
         id: existing?.id ?? uuidv4(),
         charts: normalizeChartLinks(input.charts),
+        pinned: input.pinned ?? existing?.pinned ?? false,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       }
@@ -742,6 +744,24 @@ export function TradeStoreProvider({
 
     if (cloudEnabled && userIdRef.current) {
       cloudWrite(() => deletePlaybookCloud(userIdRef.current!, id))
+    }
+  }, [cloudEnabled, cloudWrite])
+
+  const togglePlaybookPinned = useCallback((id: string) => {
+    const now = new Date().toISOString()
+    let savedEntry: PlaybookEntry | null = null
+
+    setPlaybook((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== id) return entry
+        savedEntry = { ...entry, pinned: !entry.pinned, updatedAt: now }
+        return savedEntry
+      })
+    )
+
+    if (cloudEnabled && userIdRef.current && savedEntry) {
+      const entry = savedEntry
+      cloudWrite(() => upsertPlaybookEntry(userIdRef.current!, entry))
     }
   }, [cloudEnabled, cloudWrite])
 
@@ -778,6 +798,7 @@ export function TradeStoreProvider({
       journalDate: trade.entryDate.slice(0, 10),
       charts,
       tags: [...trade.tags, 'playbook'],
+      pinned: false,
       createdAt: now,
       updatedAt: now,
     }
@@ -832,6 +853,7 @@ export function TradeStoreProvider({
         filteredPlaybook,
         savePlaybookEntry,
         deletePlaybookEntry,
+        togglePlaybookPinned,
         createPlaybookFromTrade,
         isTradeInPlaybook,
         accounts,

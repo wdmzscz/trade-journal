@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Plus, Search, Pencil, Trash2, X, BookOpen, Sparkles, TrendingUp,
+  Plus, Search, Pencil, Trash2, X, BookOpen, Sparkles, TrendingUp, Star, ArrowDownUp,
 } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { AccountScopeBanner } from '../components/AccountScopeBanner'
@@ -12,13 +12,41 @@ import type { PlaybookEntry, Trade } from '../types'
 import { PLAYBOOK_TIMEFRAMES, PLAYBOOK_SLOT_LABELS } from '../types'
 import { countValidCharts, mergePlaybookChartSlots, validatePlaybookCharts } from '../utils/chartLinks'
 import { formatCurrency } from '../utils/stats'
+import { cn } from '../utils/cn'
 
 const EMPTY_FORM = {
   title: '',
+  symbol: '',
+  entryDate: '',
   thesis: '',
   lessons: '',
   setup: '',
   tags: '',
+}
+
+type DateSort = 'newest' | 'oldest'
+
+const SORT_STORAGE_KEY = 'trade-journal-playbook-sort'
+
+function todayLocalDate(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function toDateInputValue(value?: string): string {
+  if (!value) return todayLocalDate()
+  return value.slice(0, 10)
+}
+
+function loadSort(): DateSort {
+  try {
+    return localStorage.getItem(SORT_STORAGE_KEY) === 'oldest' ? 'oldest' : 'newest'
+  } catch {
+    return 'newest'
+  }
 }
 
 export function PlaybookPage() {
@@ -28,9 +56,11 @@ export function PlaybookPage() {
     selectedAccount,
     savePlaybookEntry,
     deletePlaybookEntry,
+    togglePlaybookPinned,
   } = useTradeStore()
 
   const [search, setSearch] = useState('')
+  const [dateSort, setDateSort] = useState<DateSort>(loadSort)
   const [editing, setEditing] = useState<PlaybookEntry | null>(null)
   const [showPicker, setShowPicker] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -47,32 +77,54 @@ export function PlaybookPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return filteredPlaybook
-    return filteredPlaybook.filter((entry) =>
-      entry.symbol.toLowerCase().includes(q) ||
-      entry.title.toLowerCase().includes(q) ||
-      entry.setup?.toLowerCase().includes(q) ||
-      entry.thesis?.toLowerCase().includes(q) ||
-      entry.tags.some((tag) => tag.toLowerCase().includes(q))
-    )
-  }, [filteredPlaybook, search])
+    const list = !q
+      ? [...filteredPlaybook]
+      : filteredPlaybook.filter((entry) =>
+          entry.symbol.toLowerCase().includes(q) ||
+          entry.title.toLowerCase().includes(q) ||
+          entry.setup?.toLowerCase().includes(q) ||
+          entry.thesis?.toLowerCase().includes(q) ||
+          entry.tags.some((tag) => tag.toLowerCase().includes(q))
+        )
+
+    list.sort((a, b) => {
+      const pinDiff = Number(!!b.pinned) - Number(!!a.pinned)
+      if (pinDiff !== 0) return pinDiff
+      const dateA = a.entryDate.slice(0, 10)
+      const dateB = b.entryDate.slice(0, 10)
+      return dateSort === 'newest' ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB)
+    })
+
+    return list
+  }, [filteredPlaybook, search, dateSort])
+
+  const setSort = (next: DateSort) => {
+    setDateSort(next)
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, next)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const openNew = () => {
     setSaveError(null)
+    const today = todayLocalDate()
     setEditing({
       id: '',
       symbol: '',
       side: 'long',
       account: selectedAccount !== 'all' ? selectedAccount : '',
-      entryDate: new Date().toISOString(),
+      entryDate: `${today}T12:00:00.000Z`,
       entryPrice: 0,
       title: '',
+      journalDate: today,
       charts: mergePlaybookChartSlots(),
       tags: [],
       createdAt: '',
       updatedAt: '',
     })
-    setForm(EMPTY_FORM)
+    setForm({ ...EMPTY_FORM, entryDate: today })
     setCharts(mergePlaybookChartSlots())
   }
 
@@ -83,6 +135,8 @@ export function PlaybookPage() {
     setEditing({ ...entry, account })
     setForm({
       title: entry.title,
+      symbol: entry.symbol,
+      entryDate: toDateInputValue(entry.entryDate),
       thesis: entry.thesis ?? '',
       lessons: entry.lessons ?? '',
       setup: entry.setup ?? '',
@@ -93,6 +147,7 @@ export function PlaybookPage() {
 
   const openEditorFromTrade = (trade: Trade) => {
     setSaveError(null)
+    const tradeDate = toDateInputValue(trade.entryDate)
     setEditing({
       id: '',
       tradeId: trade.id,
@@ -105,15 +160,17 @@ export function PlaybookPage() {
       exitPrice: trade.exitPrice,
       pnl: trade.pnl,
       setup: trade.setup,
-      title: `${trade.symbol} Playbook`,
-      journalDate: trade.entryDate.slice(0, 10),
+      title: '',
+      journalDate: tradeDate,
       charts: mergePlaybookChartSlots(trade.entryCharts),
       tags: [],
       createdAt: '',
       updatedAt: '',
     })
     setForm({
-      title: `${trade.symbol} Playbook`,
+      title: '',
+      symbol: trade.symbol,
+      entryDate: tradeDate,
       thesis: trade.notes ?? '',
       lessons: '',
       setup: trade.setup ?? '',
@@ -136,8 +193,14 @@ export function PlaybookPage() {
     const { valid: validCharts, error: chartError } = validatePlaybookCharts(charts)
     if (chartError) errors.push(chartError)
 
-    if (!form.title.trim() && !editing.symbol.trim()) {
-      errors.push('请填写案例名称')
+    const symbol = form.symbol.trim().toUpperCase()
+    if (!symbol) {
+      errors.push('请填写交易品种')
+    }
+
+    const entryDate = form.entryDate.trim()
+    if (!entryDate) {
+      errors.push('请选择交易日期')
     }
 
     const linkedTrade = editing.tradeId ? filteredTrades.find((t) => t.id === editing.tradeId) : undefined
@@ -159,21 +222,22 @@ export function PlaybookPage() {
     savePlaybookEntry({
       id: editing.id || undefined,
       tradeId: editing.tradeId,
-      symbol: editing.symbol.trim() || form.title.trim(),
+      symbol,
       side: editing.side,
       account,
-      entryDate: editing.entryDate,
+      entryDate: `${entryDate}T12:00:00.000Z`,
       exitDate: editing.exitDate,
       entryPrice: editing.entryPrice,
       exitPrice: editing.exitPrice,
       pnl: editing.pnl,
-      title: form.title.trim() || `${editing.symbol} Playbook`,
+      title: form.title.trim() || symbol,
       thesis: form.thesis.trim() || undefined,
       lessons: form.lessons.trim() || undefined,
       setup: form.setup.trim() || undefined,
-      journalDate: editing.journalDate ?? editing.entryDate.slice(0, 10),
+      journalDate: entryDate,
       charts: validCharts,
       tags: form.tags.split(/[,;]/).map((t) => t.trim()).filter(Boolean),
+      pinned: editing.pinned ?? false,
     })
     closeEditor()
   }
@@ -230,15 +294,40 @@ export function PlaybookPage() {
         </p>
       </div>
 
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="搜索标的、策略、标签…"
-          className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[12rem] flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="搜索标的、策略、标签…"
+            className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          />
+        </div>
+        <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+          <ArrowDownUp className="ml-1.5 h-3.5 w-3.5 text-slate-400" />
+          <button
+            type="button"
+            onClick={() => setSort('newest')}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+              dateSort === 'newest' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+            )}
+          >
+            最新优先
+          </button>
+          <button
+            type="button"
+            onClick={() => setSort('oldest')}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+              dateSort === 'oldest' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+            )}
+          >
+            最旧优先
+          </button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -254,6 +343,7 @@ export function PlaybookPage() {
               key={entry.id}
               entry={entry}
               onEdit={() => openEdit(entry)}
+              onTogglePin={() => togglePlaybookPinned(entry.id)}
               onDelete={() => {
                 if (confirm(`确定删除「${entry.title}」？`)) deletePlaybookEntry(entry.id)
               }}
@@ -303,26 +393,44 @@ export function PlaybookPage() {
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900">
                 {editing.id ? '编辑案例' : '新建案例'}
-                {editing.symbol && <span className="ml-2 text-brand-600">{editing.symbol}</span>}
               </h2>
               <button onClick={closeEditor} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {editing.symbol && (
+            {(editing.tradeId || editing.entryPrice > 0) && (
               <div className="mb-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                {editing.entryDate.slice(0, 10)} · {editing.side === 'long' ? '做多' : '做空'} @ ${editing.entryPrice.toFixed(2)}
+                {form.symbol || editing.symbol} · {form.entryDate || editing.entryDate.slice(0, 10)} · {editing.side === 'long' ? '做多' : '做空'}
+                {editing.entryPrice > 0 && <> @ ${editing.entryPrice.toFixed(2)}</>}
                 {editing.pnl != null && <span className="ml-2">盈亏 {formatCurrency(editing.pnl)}</span>}
               </div>
             )}
 
             <div className="space-y-4">
-              <Field label="案例名称" hint={editing.symbol ? '可选，留空将使用标的名称' : '必填（无关联交易时）'} required={!editing.symbol}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="交易品种" hint="如 MGC、NG、AAPL" required>
+                  <input
+                    value={form.symbol}
+                    onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value }))}
+                    placeholder="MGC"
+                    className="form-input uppercase"
+                  />
+                </Field>
+                <Field label="交易日期" hint="默认今天，可改成实际交易日" required>
+                  <input
+                    type="date"
+                    value={form.entryDate}
+                    onChange={(e) => setForm((f) => ({ ...f, entryDate: e.target.value }))}
+                    className="form-input"
+                  />
+                </Field>
+              </div>
+              <Field label="案例名称" hint="选填；留空时卡片标题使用交易品种">
                 <input
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="如：DAL 突破回踩做多"
+                  placeholder="如：漂亮的 MB1/MB2"
                   className="form-input"
                 />
               </Field>
@@ -419,22 +527,42 @@ function PlaybookCard({
   entry,
   onEdit,
   onDelete,
+  onTogglePin,
 }: {
   entry: PlaybookEntry
   onEdit: () => void
   onDelete: () => void
+  onTogglePin: () => void
 }) {
   const chartCount = countValidCharts(entry.charts)
+  const titleLooksLikeSymbol =
+    entry.title.trim().toUpperCase() === entry.symbol.trim().toUpperCase()
 
   return (
-    <article className="flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+    <article
+      className={cn(
+        'flex flex-col rounded-xl border bg-white shadow-sm transition-shadow hover:shadow-md',
+        entry.pinned ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-200'
+      )}
+    >
       <div className="border-b border-slate-100 p-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="font-bold text-slate-900">{entry.title}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-slate-900">{entry.title}</h3>
+              {entry.pinned && (
+                <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                  置顶
+                </span>
+              )}
+            </div>
             <p className="mt-0.5 text-sm text-slate-500">
-              <span className="font-semibold text-slate-800">{entry.symbol}</span>
-              {' · '}
+              {!titleLooksLikeSymbol && (
+                <>
+                  <span className="font-semibold text-slate-800">{entry.symbol}</span>
+                  {' · '}
+                </>
+              )}
               {entry.entryDate.slice(0, 10)}
               {entry.pnl != null && (
                 <span className="ml-1">
@@ -444,6 +572,16 @@ function PlaybookCard({
             </p>
           </div>
           <div className="flex shrink-0 gap-1">
+            <button
+              onClick={onTogglePin}
+              className={cn(
+                'rounded-lg p-1.5 hover:bg-amber-50',
+                entry.pinned ? 'text-amber-500' : 'text-slate-400 hover:text-amber-500'
+              )}
+              title={entry.pinned ? '取消置顶' : '置顶'}
+            >
+              <Star className={cn('h-4 w-4', entry.pinned && 'fill-current')} />
+            </button>
             <button onClick={onEdit} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600" title="编辑">
               <Pencil className="h-4 w-4" />
             </button>

@@ -53,6 +53,7 @@ interface PlaybookRow {
   journal_date: string | null
   charts: PlaybookEntry['charts']
   tags: string[]
+  pinned: boolean | null
   created_at: string
   updated_at: string
 }
@@ -159,6 +160,7 @@ function rowToPlaybook(row: PlaybookRow): PlaybookEntry {
     journalDate: row.journal_date ?? undefined,
     charts: row.charts ?? [],
     tags: row.tags ?? [],
+    pinned: row.pinned ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -184,6 +186,7 @@ function playbookToRow(entry: PlaybookEntry, userId: string): PlaybookRow {
     journal_date: entry.journalDate ?? null,
     charts: entry.charts,
     tags: entry.tags,
+    pinned: entry.pinned ?? false,
     created_at: entry.createdAt,
     updated_at: entry.updatedAt,
   }
