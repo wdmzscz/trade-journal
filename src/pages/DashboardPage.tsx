@@ -10,16 +10,20 @@ import { useTradeStore } from '../hooks/useTradeStore'
 import { StatCard } from '../components/StatCard'
 import { PnlBadge } from '../components/PnlBadge'
 import { AccountScopeBanner } from '../components/AccountScopeBanner'
+import { PerformanceScoreCard } from '../components/PerformanceScoreCard'
 import {
   computeDashboardStats, computeDailyPnl, computeCumulativePnl,
   computeSymbolStats, computeSetupStats, computeWinLossDistribution,
   computeDayOfWeekStats, formatCurrency, formatPercent, computeAccountReturn,
+  computePerformanceScore,
 } from '../utils/stats'
+import { cn } from '../utils/cn'
 
 export function DashboardPage() {
   const { filteredTrades, selectedAccount, selectedAccountInfo, accountInfos, accountProfiles } = useTradeStore()
 
   const stats = useMemo(() => computeDashboardStats(filteredTrades), [filteredTrades])
+  const performanceScore = useMemo(() => computePerformanceScore(filteredTrades), [filteredTrades])
   const accountReturn = useMemo(() => {
     if (selectedAccount === 'all') {
       const returns = accountInfos
@@ -66,12 +70,12 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {hasAccountNav && (
+        {isAllAccounts && hasAccountNav && (
           <StatCard
-            title={isAllAccounts ? '账户总盈亏' : '当前盈亏'}
+            title="账户总盈亏"
             value={formatCurrency(accountReturn)}
             trend={accountReturn >= 0 ? 'up' : 'down'}
-            subtitle={isAllAccounts ? '净资产 − 本金（与 IBKR 账户一致）' : '净资产 − 累计入金'}
+            subtitle="净资产 − 本金（与 IBKR 账户一致）"
             icon={<DollarSign className="h-5 w-5" />}
           />
         )}
@@ -116,28 +120,57 @@ export function DashboardPage() {
         <StatCard title="平均 R 倍数" value={stats.avgR.toFixed(2)} trend="neutral" icon={<Percent className="h-5 w-5" />} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <ChartCard title="累计盈亏曲线">
-          {cumulativePnl.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={cumulativePnl}>
-                <defs>
-                  <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), '']} />
-                <Area type="monotone" dataKey="cumulative" stroke="#7c3aed" fill="url(#pnlGradient)" strokeWidth={2} name="累计盈亏" />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyChart />
-          )}
-        </ChartCard>
+      {performanceScore ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <PerformanceScoreCard score={performanceScore} />
+          <ChartCard title="累计盈亏曲线">
+            {cumulativePnl.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <AreaChart data={cumulativePnl}>
+                  <defs>
+                    <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                  <Tooltip formatter={(v: number) => [formatCurrency(v), '']} />
+                  <Area type="monotone" dataKey="cumulative" stroke="#7c3aed" fill="url(#pnlGradient)" strokeWidth={2} name="累计盈亏" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart />
+            )}
+          </ChartCard>
+        </div>
+      ) : null}
+
+      <div className={cn('grid gap-6', performanceScore ? '' : 'lg:grid-cols-2')}>
+        {!performanceScore && (
+          <ChartCard title="累计盈亏曲线">
+            {cumulativePnl.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={cumulativePnl}>
+                  <defs>
+                    <linearGradient id="pnlGradientFallback" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                  <Tooltip formatter={(v: number) => [formatCurrency(v), '']} />
+                  <Area type="monotone" dataKey="cumulative" stroke="#7c3aed" fill="url(#pnlGradientFallback)" strokeWidth={2} name="累计盈亏" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart />
+            )}
+          </ChartCard>
+        )}
 
         <ChartCard title="每日盈亏">
           {dailyPnl.length > 0 ? (

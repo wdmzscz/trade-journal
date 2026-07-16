@@ -154,6 +154,24 @@ export interface DashboardStats {
   breakEvenTrades: number
 }
 
+/** 六维交易评分（类似 Zella Score） */
+export interface PerformanceScoreAxis {
+  key: string
+  label: string
+  score: number
+  rawLabel: string
+}
+
+export interface PerformanceScore {
+  overall: number
+  axes: PerformanceScoreAxis[]
+  closedTrades: number
+  maxDrawdown: number
+  recoveryFactor: number
+  avgWinLossRatio: number
+  consistency: number
+}
+
 export interface DailyPnl {
   date: string
   pnl: number

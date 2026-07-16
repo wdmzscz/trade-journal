@@ -19,6 +19,7 @@ import type {
   DayResult,
   CalendarStats,
   CalendarWeekRow,
+  PerformanceScore,
 } from '../types'
 
 export function formatCurrency(value: number): string {
@@ -135,6 +136,187 @@ export function computeCumulativePnl(daily: DailyPnl[]): { date: string; cumulat
     cumulative += d.pnl
     return { date: d.date, cumulative, daily: d.pnl }
   })
+}
+
+function clampScore(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(100, value))
+}
+
+function interpolateScore(
+  value: number,
+  points: Array<{ value: number; score: number }>
+): number {
+  if (value <= points[0].value) return points[0].score
+  for (let i = 1; i < points.length; i += 1) {
+    const lower = points[i - 1]
+    const upper = points[i]
+    if (value <= upper.value) {
+      const progress = (value - lower.value) / (upper.value - lower.value)
+      return lower.score + progress * (upper.score - lower.score)
+    }
+  }
+  return points[points.length - 1].score
+}
+
+/** TradeZella 的 PF / Avg W:L 分段（<1.8 固定 20，2.6 达到 100） */
+function zellaRatioScore(value: number): number {
+  if (value < 1.8) return 20
+  return clampScore(
+    interpolateScore(value, [
+      { value: 1.8, score: 50 },
+      { value: 1.9, score: 60 },
+      { value: 2.0, score: 70 },
+      { value: 2.2, score: 80 },
+      { value: 2.4, score: 90 },
+      { value: 2.6, score: 100 },
+    ])
+  )
+}
+
+/** TradeZella Recovery Factor 官方分段的连续插值版本 */
+function zellaRecoveryScore(value: number): number {
+  if (value < 1) return 0
+  return clampScore(
+    interpolateScore(value, [
+      { value: 1.0, score: 1 },
+      { value: 1.5, score: 30 },
+      { value: 2.0, score: 50 },
+      { value: 2.5, score: 60 },
+      { value: 3.0, score: 70 },
+      { value: 3.5, score: 100 },
+    ])
+  )
+}
+
+/** 从累计盈亏曲线计算最大回撤（金额，正数） */
+export function computeMaxDrawdown(cumulative: { cumulative: number }[]): number {
+  let peak = 0
+  let maxDd = 0
+  for (const point of cumulative) {
+    peak = Math.max(peak, point.cumulative)
+    maxDd = Math.max(maxDd, peak - point.cumulative)
+  }
+  return maxDd
+}
+
+function computeMaxDrawdownPercent(cumulative: { cumulative: number }[]): number {
+  let peak = 0
+  let maxPercent = 0
+
+  for (const point of cumulative) {
+    if (point.cumulative > peak) peak = point.cumulative
+    const drawdown = peak - point.cumulative
+    if (drawdown <= 0) continue
+    // 尚未形成正峰值就跌入亏损，视为 100% 回撤。
+    const percent = peak > 0 ? (drawdown / peak) * 100 : 100
+    maxPercent = Math.max(maxPercent, percent)
+  }
+
+  return maxPercent
+}
+
+/**
+ * 六维交易综合评分（0–100），采用 TradeZella 公布的评分区间与权重：
+ * PF 25% · Avg W/L 20% · Max DD 20% · Win% 15% · Recovery 10% · Consistency 10%
+ * Win% · Profit factor · Avg win/loss · Recovery · Max DD control · Consistency
+ */
+export function computePerformanceScore(trades: Trade[]): PerformanceScore | null {
+  const closed = trades.filter((t) => t.status === 'closed')
+  if (closed.length < 3) return null
+
+  const winners = closed.filter((t) => t.pnl > 0)
+  const losers = closed.filter((t) => t.pnl < 0)
+  const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
+  const grossProfit = winners.reduce((sum, t) => sum + t.pnl, 0)
+  const grossLoss = Math.abs(losers.reduce((sum, t) => sum + t.pnl, 0))
+
+  const winRate = (winners.length / closed.length) * 100
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0
+  const avgWin = winners.length ? grossProfit / winners.length : 0
+  const avgLoss = losers.length ? grossLoss / losers.length : 0
+  const avgWinLossRatio = avgLoss > 0 ? avgWin / avgLoss : avgWin > 0 ? 999 : 0
+
+  const daily = computeDailyPnl(trades)
+  const cumulative = computeCumulativePnl(daily)
+  const maxDrawdown = computeMaxDrawdown(cumulative)
+  const maxDrawdownPercent = computeMaxDrawdownPercent(cumulative)
+  const recoveryFactor = maxDrawdown > 0 ? totalPnl / maxDrawdown : totalPnl > 0 ? 999 : 0
+
+  const dailyMean = daily.length ? totalPnl / daily.length : 0
+  const dailyVariance = daily.length
+    ? daily.reduce((sum, day) => sum + (day.pnl - dailyMean) ** 2, 0) / daily.length
+    : 0
+  const dailyStdDev = Math.sqrt(dailyVariance)
+  const consistencyVariation =
+    totalPnl > 0 ? (dailyStdDev / totalPnl) * 100 : 100
+
+  // TradeZella 官方映射
+  const winScore = clampScore((winRate / 60) * 100) // 60% 封顶 100
+  const pfScore = zellaRatioScore(profitFactor)
+  const avgWlScore = zellaRatioScore(avgWinLossRatio)
+  const recoveryScore = zellaRecoveryScore(recoveryFactor)
+  const drawdownScore = clampScore(100 - maxDrawdownPercent)
+  const consistencyScore =
+    dailyMean < 0 ? 0 : clampScore(100 - consistencyVariation)
+
+  const axes = [
+    {
+      key: 'win',
+      label: 'Win %',
+      score: Math.round(winScore * 10) / 10,
+      rawLabel: `${winRate.toFixed(1)}%`,
+    },
+    {
+      key: 'pf',
+      label: 'Profit factor',
+      score: Math.round(pfScore * 10) / 10,
+      rawLabel: profitFactor >= 999 ? '∞' : profitFactor.toFixed(2),
+    },
+    {
+      key: 'avgWl',
+      label: 'Avg win/loss',
+      score: Math.round(avgWlScore * 10) / 10,
+      rawLabel: avgWinLossRatio >= 999 ? '∞' : `${avgWinLossRatio.toFixed(2)}x`,
+    },
+    {
+      key: 'recovery',
+      label: 'Recovery factor',
+      score: Math.round(recoveryScore * 10) / 10,
+      rawLabel: recoveryFactor >= 999 ? '∞' : recoveryFactor.toFixed(2),
+    },
+    {
+      key: 'drawdown',
+      label: 'Max drawdown',
+      score: Math.round(drawdownScore * 10) / 10,
+      rawLabel: `${maxDrawdownPercent.toFixed(1)}% (${formatCurrency(-maxDrawdown)})`,
+    },
+    {
+      key: 'consistency',
+      label: 'Consistency',
+      score: Math.round(consistencyScore * 10) / 10,
+      rawLabel: `波动 ${consistencyVariation.toFixed(1)}%`,
+    },
+  ]
+
+  const weightedOverall =
+    pfScore * 0.25 +
+    avgWlScore * 0.2 +
+    drawdownScore * 0.2 +
+    winScore * 0.15 +
+    recoveryScore * 0.1 +
+    consistencyScore * 0.1
+  const overall = Math.round(weightedOverall * 100) / 100
+
+  return {
+    overall,
+    axes,
+    closedTrades: closed.length,
+    maxDrawdown,
+    recoveryFactor: recoveryFactor >= 999 ? 999 : recoveryFactor,
+    avgWinLossRatio: avgWinLossRatio >= 999 ? 999 : avgWinLossRatio,
+    consistency: consistencyScore,
+  }
 }
 
 function simulateDailyEquity(

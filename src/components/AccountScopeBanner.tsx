@@ -130,19 +130,8 @@ export function AccountScopeBanner({ className }: { className?: string }) {
             净资产 <span className="font-semibold text-slate-900">{formatCurrency(selectedAccountInfo.currentCapital)}</span>
           </>
         )}
-        {accountReturn != null ? (
-          <>
-            <span className="mx-2 text-slate-200">|</span>
-            当前盈亏 <span className={cn('font-semibold', accountReturn >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(accountReturn)}</span>
-            <span className="mx-2 text-slate-200">|</span>
-            总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
-          </>
-        ) : (
-          <>
-            <span className="mx-2 text-slate-200">|</span>
-            总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
-          </>
-        )}
+        <span className="mx-2 text-slate-200">|</span>
+        总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
       </p>
     </div>
   )
