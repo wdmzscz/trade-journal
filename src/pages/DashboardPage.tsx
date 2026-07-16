@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import {
-  DollarSign, TrendingUp, Target, BarChart3, Percent, Activity,
+  TrendingUp, Target, BarChart3, Percent, Activity,
 } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { StatCard } from '../components/StatCard'
@@ -14,37 +14,16 @@ import { PerformanceScoreCard } from '../components/PerformanceScoreCard'
 import {
   computeDashboardStats, computeDailyPnl, computeCumulativePnl,
   computeSymbolStats, computeSetupStats, computeWinLossDistribution,
-  computeDayOfWeekStats, formatCurrency, formatPercent, computeAccountReturn,
+  computeDayOfWeekStats, formatCurrency, formatPercent,
   computePerformanceScore,
 } from '../utils/stats'
 import { cn } from '../utils/cn'
 
 export function DashboardPage() {
-  const { filteredTrades, selectedAccount, selectedAccountInfo, accountInfos, accountProfiles } = useTradeStore()
+  const { filteredTrades } = useTradeStore()
 
   const stats = useMemo(() => computeDashboardStats(filteredTrades), [filteredTrades])
   const performanceScore = useMemo(() => computePerformanceScore(filteredTrades), [filteredTrades])
-  const accountReturn = useMemo(() => {
-    if (selectedAccount === 'all') {
-      const returns = accountInfos
-        .map((a) => {
-          const profile = accountProfiles.find((p) => p.id === a.id)
-          return computeAccountReturn(
-            profile?.startingCapital,
-            a.currentCapital,
-            profile?.totalDeposits
-          )
-        })
-        .filter((v): v is number => v != null)
-      return returns.length > 0 ? returns.reduce((s, v) => s + v, 0) : null
-    }
-    const profile = accountProfiles.find((p) => p.id === selectedAccount)
-    return computeAccountReturn(
-      profile?.startingCapital,
-      selectedAccountInfo?.currentCapital,
-      profile?.totalDeposits
-    )
-  }, [selectedAccount, selectedAccountInfo, accountInfos, accountProfiles])
   const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const cumulativePnl = useMemo(() => computeCumulativePnl(dailyPnl), [dailyPnl])
   const symbolStats = useMemo(() => computeSymbolStats(filteredTrades).slice(0, 8), [filteredTrades])
@@ -57,9 +36,6 @@ export function DashboardPage() {
     [filteredTrades]
   )
 
-  const isAllAccounts = selectedAccount === 'all'
-  const hasAccountNav = accountReturn != null
-
   return (
     <div className="space-y-6">
       <AccountScopeBanner />
@@ -70,24 +46,11 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {isAllAccounts && hasAccountNav && (
-          <StatCard
-            title="账户总盈亏"
-            value={formatCurrency(accountReturn)}
-            trend={accountReturn >= 0 ? 'up' : 'down'}
-            subtitle="净资产 − 本金（与 IBKR 账户一致）"
-            icon={<DollarSign className="h-5 w-5" />}
-          />
-        )}
         <StatCard
-          title={isAllAccounts && hasAccountNav ? '交易盈亏合计' : '总盈亏 (P&L)'}
+          title="总盈亏 (P&L)"
           value={formatCurrency(stats.totalPnl)}
           trend={stats.totalPnl >= 0 ? 'up' : 'down'}
-          subtitle={
-            isAllAccounts && hasAccountNav
-              ? `${stats.closedTrades} 笔已平仓 · 全部平仓时应与账户总盈亏一致`
-              : `${stats.closedTrades} 笔已平仓交易`
-          }
+          subtitle={`${stats.closedTrades} 笔已平仓交易`}
           icon={<Activity className="h-5 w-5" />}
         />
         <StatCard

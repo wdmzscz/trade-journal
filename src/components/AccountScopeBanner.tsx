@@ -1,5 +1,5 @@
 import { useTradeStore } from '../hooks/useTradeStore'
-import { formatCurrency, computeAccountReturn, resolvePrincipalCapital } from '../utils/stats'
+import { formatCurrency, resolvePrincipalCapital } from '../utils/stats'
 import { cn } from '../utils/cn'
 
 export function AccountScopeBanner({ className }: { className?: string }) {
@@ -7,26 +7,6 @@ export function AccountScopeBanner({ className }: { className?: string }) {
 
   const closed = filteredTrades.filter((t) => t.status === 'closed')
   const tradePnl = closed.reduce((sum, t) => sum + t.pnl, 0)
-  const accountReturn = selectedAccount === 'all'
-    ? accountInfos
-        .map((a) => {
-          const profile = accountProfiles.find((p) => p.id === a.id)
-          return computeAccountReturn(
-            profile?.startingCapital,
-            a.currentCapital,
-            profile?.totalDeposits
-          )
-        })
-        .filter((v): v is number => v != null)
-        .reduce((s, v) => s + v, 0) || null
-    : (() => {
-        const profile = accountProfiles.find((p) => p.id === selectedAccount)
-        return computeAccountReturn(
-          profile?.startingCapital,
-          selectedAccountInfo?.currentCapital,
-          profile?.totalDeposits
-        )
-      })()
 
   const selectedProfile = selectedAccount === 'all'
     ? null
@@ -58,17 +38,7 @@ export function AccountScopeBanner({ className }: { className?: string }) {
             </>
           )}
           <span className="mx-2 text-brand-300">|</span>
-          {accountReturn != null ? (
-            <>
-              账户总盈亏 <span className={cn('font-semibold', accountReturn >= 0 ? 'text-emerald-700' : 'text-red-600')}>{formatCurrency(accountReturn)}</span>
-              <span className="mx-2 text-brand-300">|</span>
-              交易盈亏 {formatCurrency(tradePnl)}
-            </>
-          ) : (
-            <>
-              总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-700' : 'text-red-600')}>{formatCurrency(tradePnl)}</span>
-            </>
-          )}
+          总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-700' : 'text-red-600')}>{formatCurrency(tradePnl)}</span>
         </p>
       </div>
     )
