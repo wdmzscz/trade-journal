@@ -2,8 +2,9 @@ name: IBKR Daily Sync
 
 on:
   schedule:
-    # UTC 22:00 ≈ 美东 18:00（夏令时）收盘后
-    - cron: '0 22 * * *'
+    # UTC 05:00 ≈ 美东 01:00（夏令时）/ 00:00（冬令时）
+    # IBKR statement 通常过 00:30 才可用，故凌晨 1 点再同步
+    - cron: '0 5 * * *'
   workflow_dispatch:
 
 jobs:

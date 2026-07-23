@@ -218,7 +218,7 @@ export function IbkrSyncPage() {
             {([
               ['manual', '仅手动', '自己点同步'],
               ['hourly', '每小时', '交易日较及时'],
-              ['daily', '每天', '收盘后同步'],
+              ['daily', '每天凌晨 1 点', '等 statement 可用后再同步'],
             ] as const).map(([value, label, desc]) => (
               <label
                 key={value}
