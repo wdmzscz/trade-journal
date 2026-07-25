@@ -62,8 +62,9 @@ supabase functions deploy sync-ibkr
 
 | Name | Value |
 |------|-------|
-| `CRON_SECRET` | 与 Supabase 相同 |
+| `CRON_SECRET` | 与 Supabase 相同（定时任务鉴权） |
 | `VITE_SUPABASE_URL` | 已有 |
+| `VITE_SUPABASE_ANON_KEY` | 已有（调用 Edge Function 网关需要） |
 
 ---
 

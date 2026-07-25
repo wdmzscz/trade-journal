@@ -14,14 +14,17 @@ jobs:
       - name: Trigger Supabase Edge Function
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || secrets.TRADE }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || secrets.IBKR_TRADE }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "::error::Missing secrets: need VITE_SUPABASE_URL and CRON_SECRET (must match Supabase CRON_SECRET)"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$CRON_SECRET" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Missing secrets: need VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, and CRON_SECRET"
             exit 1
           fi
           echo "Triggering daily IBKR sync..."
           resp=$(curl -sS -w "\n%{http_code}" -X POST "${SUPABASE_URL}/functions/v1/sync-ibkr?interval=daily" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "x-cron-secret: ${CRON_SECRET}" \
             -H "Content-Type: application/json")
           body=$(echo "$resp" | head -n -1)
