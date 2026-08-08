@@ -44,11 +44,11 @@ export function ChartLinkFields({ charts, onChange, timeframes, compact, showVal
               'rounded-xl border p-3',
               invalid && 'border-red-300 bg-red-50/50',
               !invalid && valid && 'border-emerald-200 bg-emerald-50/40',
-              !invalid && !valid && 'border-slate-200 bg-slate-50/50'
+              !invalid && !valid && 'border-slate-200 dark:border-surface-700 bg-slate-50/50'
             )}
           >
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="rounded-md bg-white px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-700 shadow-sm">
+              <span className="rounded-md bg-white dark:bg-surface-900 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 shadow-sm">
                 {slotHeading(chart.timeframe)}
               </span>
               {valid && (
@@ -56,7 +56,7 @@ export function ChartLinkFields({ charts, onChange, timeframes, compact, showVal
                   href={chart.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:text-brand-300"
                 >
                   预览
                   <ExternalLink className="h-3 w-3" />
@@ -80,10 +80,10 @@ export function ChartLinkFields({ charts, onChange, timeframes, compact, showVal
               />
             )}
             {chart.url && !valid && (
-              <p className="mt-1.5 text-xs text-red-600">链接格式无效，请使用 http:// 或 https:// 开头的完整地址</p>
+              <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">链接格式无效，请使用 http:// 或 https:// 开头的完整地址</p>
             )}
             {valid && tradingViewHost(chart.url) && (
-              <p className="mt-1.5 text-xs text-emerald-700">
+              <p className="mt-1.5 text-xs text-emerald-700 dark:text-emerald-400">
                 {isTradingViewSnapshotUrl(chart.url)
                   ? '快照链接 · 保存后自动显示截图预览'
                   : canEmbedTradingView(chart.url)

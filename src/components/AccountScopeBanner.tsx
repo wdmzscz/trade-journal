@@ -26,19 +26,33 @@ export function AccountScopeBanner({ className }: { className?: string }) {
 
   if (selectedAccount === 'all') {
     return (
-      <div className={cn('rounded-xl border border-brand-200 bg-brand-50 px-4 py-3', className)}>
-        <p className="text-sm text-brand-900">
+      <div
+        className={cn(
+          'rounded-xl border border-brand-200 bg-brand-50 px-4 py-3',
+          'dark:border-brand-700 dark:bg-surface-800',
+          className
+        )}
+      >
+        <p className="text-sm text-brand-900 dark:text-slate-100">
           <span className="font-semibold">全部账户汇总</span>
-          <span className="mx-2 text-brand-300">|</span>
+          <span className="mx-2 text-brand-300 dark:text-slate-500">|</span>
           {filteredTrades.length} 笔交易
           {principalCapital > 0 && (
             <>
-              <span className="mx-2 text-brand-300">|</span>
+              <span className="mx-2 text-brand-300 dark:text-slate-500">|</span>
               累计入金 <span className="font-semibold">{formatCurrency(principalCapital)}</span>
             </>
           )}
-          <span className="mx-2 text-brand-300">|</span>
-          总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-700' : 'text-red-600')}>{formatCurrency(tradePnl)}</span>
+          <span className="mx-2 text-brand-300 dark:text-slate-500">|</span>
+          总盈亏{' '}
+          <span
+            className={cn(
+              'font-semibold',
+              tradePnl >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+            )}
+          >
+            {formatCurrency(tradePnl)}
+          </span>
         </p>
       </div>
     )
@@ -48,10 +62,10 @@ export function AccountScopeBanner({ className }: { className?: string }) {
 
   if (filteredTrades.length === 0) {
     return (
-      <div className={cn('rounded-xl border border-amber-200 bg-amber-50 px-4 py-3', className)}>
-        <p className="text-sm text-amber-900">
+      <div className={cn('rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/30', className)}>
+        <p className="text-sm text-amber-900 dark:text-amber-100">
           <span className="font-semibold">{label}</span>
-          <span className="mx-2 text-amber-300">|</span>
+          <span className="mx-2 text-amber-300 dark:text-amber-700">|</span>
           该账户暂无交易数据
         </p>
         {otherAccountsWithData.length > 0 && (
@@ -59,7 +73,7 @@ export function AccountScopeBanner({ className }: { className?: string }) {
             <button
               type="button"
               onClick={() => setSelectedAccount('all')}
-              className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm hover:bg-brand-50"
+              className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-brand-700 shadow-sm hover:bg-brand-50 dark:bg-surface-900 dark:text-brand-300 dark:hover:bg-surface-800"
             >
               查看全部账户（{accountInfos.reduce((s, a) => s + a.tradeCount, 0)} 笔）
             </button>
@@ -68,7 +82,7 @@ export function AccountScopeBanner({ className }: { className?: string }) {
                 key={account.id}
                 type="button"
                 onClick={() => setSelectedAccount(account.id)}
-                className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 dark:bg-surface-900 dark:text-slate-200 dark:hover:bg-surface-800"
               >
                 切换到 {account.label}（{account.tradeCount} 笔）
               </button>
@@ -80,28 +94,28 @@ export function AccountScopeBanner({ className }: { className?: string }) {
   }
 
   return (
-    <div className={cn('rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm', className)}>
-      <p className="text-sm text-slate-700">
-        <span className="font-semibold text-slate-900">{label}</span>
+    <div className={cn('rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-surface-700 dark:bg-surface-900', className)}>
+      <p className="text-sm text-slate-700 dark:text-slate-300">
+        <span className="font-semibold text-slate-900 dark:text-slate-100">{label}</span>
         {label !== selectedAccount && (
           <span className="ml-2 text-slate-400">({selectedAccount})</span>
         )}
-        <span className="mx-2 text-slate-200">|</span>
+        <span className="mx-2 text-slate-200 dark:text-surface-700">|</span>
         {filteredTrades.length} 笔交易
         {principalCapital > 0 && (
           <>
-            <span className="mx-2 text-slate-200">|</span>
-            累计入金 <span className="font-semibold text-slate-900">{formatCurrency(principalCapital)}</span>
+            <span className="mx-2 text-slate-200 dark:text-surface-700">|</span>
+            累计入金 <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(principalCapital)}</span>
           </>
         )}
         {selectedAccountInfo?.currentCapital != null && selectedAccountInfo.currentCapital > 0 && (
           <>
-            <span className="mx-2 text-slate-200">|</span>
-            净资产 <span className="font-semibold text-slate-900">{formatCurrency(selectedAccountInfo.currentCapital)}</span>
+            <span className="mx-2 text-slate-200 dark:text-surface-700">|</span>
+            净资产 <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(selectedAccountInfo.currentCapital)}</span>
           </>
         )}
-        <span className="mx-2 text-slate-200">|</span>
-        总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600' : 'text-red-500')}>{formatCurrency(tradePnl)}</span>
+        <span className="mx-2 text-slate-200 dark:text-surface-700">|</span>
+        总盈亏 <span className={cn('font-semibold', tradePnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400')}>{formatCurrency(tradePnl)}</span>
       </p>
     </div>
   )

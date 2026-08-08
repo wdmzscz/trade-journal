@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth'
+import { ThemeProvider } from './hooks/useTheme'
 import { TradeStoreProvider } from './hooks/useTradeStore'
 import { isCloudEnabled } from './lib/supabase'
 import { Layout } from './components/Layout'
@@ -15,7 +16,7 @@ import { PlaybookPage } from './pages/PlaybookPage'
 
 function LoadingScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-50">
+    <div className="flex min-h-screen items-center justify-center bg-surface-50 dark:bg-surface-950">
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
     </div>
   )
@@ -50,8 +51,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </ThemeProvider>
   )
 }

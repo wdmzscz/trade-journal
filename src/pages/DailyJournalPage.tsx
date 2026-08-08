@@ -94,19 +94,19 @@ export function DailyJournalPage() {
       </div>
 
       {!canEditJournal && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-800">
           请先选择具体账户标签页，再编辑该账户的日记。汇总视图下日记为只读。
         </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="rounded-xl border border-surface-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <button onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1))} className="rounded p-1 hover:bg-slate-100">
+            <button onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1))} className="rounded p-1 hover:bg-slate-100 dark:hover:bg-surface-800 dark:bg-surface-800">
               <ChevronLeft className="h-5 w-5" />
             </button>
             <h3 className="font-semibold">{format(currentMonth, 'yyyy年 M月', { locale: zhCN })}</h3>
-            <button onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1))} className="rounded p-1 hover:bg-slate-100">
+            <button onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1))} className="rounded p-1 hover:bg-slate-100 dark:hover:bg-surface-800 dark:bg-surface-800">
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>
@@ -132,12 +132,12 @@ export function DailyJournalPage() {
                   key={dateStr}
                   onClick={() => loadFormForDate(dateStr)}
                   className={`relative flex flex-col items-center rounded-lg p-1.5 text-xs transition-colors ${
-                    isSelected ? 'bg-brand-600 text-white' : isToday(day) ? 'bg-brand-50 text-brand-700' : 'hover:bg-slate-100'
+                    isSelected ? 'bg-brand-600 text-white' : isToday(day) ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300' : 'hover:bg-slate-100 dark:hover:bg-surface-800 dark:bg-surface-800'
                   } ${!isSameMonth(day, currentMonth) ? 'opacity-40' : ''}`}
                 >
                   <span className="font-medium">{format(day, 'd')}</span>
                   {pnl && (
-                    <span className={`text-[10px] ${isSelected ? 'text-white' : pnl.pnl >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    <span className={`text-[10px] ${isSelected ? 'text-white' : pnl.pnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
                       {pnl.pnl >= 0 ? '+' : ''}{pnl.pnl.toFixed(0)}
                     </span>
                   )}
@@ -149,19 +149,19 @@ export function DailyJournalPage() {
         </div>
 
         <div className="space-y-4 lg:col-span-2">
-          <div className="flex items-center justify-between rounded-xl border border-surface-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-4 shadow-sm">
             <div>
-              <h3 className="font-semibold text-slate-900">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100">
                 {format(parseISO(selectedDate), 'yyyy年 M月 d日 EEEE', { locale: zhCN })}
               </h3>
-              <p className="text-sm text-slate-500">{dayTrades.length} 笔交易</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{dayTrades.length} 笔交易</p>
             </div>
             {selectedPnl && <PnlBadge value={selectedPnl.pnl} />}
           </div>
 
           {dayTrades.length > 0 && (
-            <div className="rounded-xl border border-surface-200 bg-white p-4 shadow-sm">
-              <h4 className="mb-2 text-sm font-semibold text-slate-700">当日交易</h4>
+            <div className="rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-4 shadow-sm">
+              <h4 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">当日交易</h4>
               <div className="space-y-2">
                 {dayTrades.map((t) => (
                   <div key={t.id} className="flex items-center justify-between text-sm">
@@ -173,7 +173,7 @@ export function DailyJournalPage() {
             </div>
           )}
 
-          <div className={`rounded-xl border border-surface-200 bg-white p-5 shadow-sm ${!canEditJournal ? 'opacity-60' : ''}`}>
+          <div className={`rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm ${!canEditJournal ? 'opacity-60' : ''}`}>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="心情" value={form.mood} onChange={(v) => setForm({ ...form, mood: v })} placeholder="平静 / 焦虑 / 自信..." disabled={!canEditJournal} />
               <Field label="市场状况" value={form.marketCondition} onChange={(v) => setForm({ ...form, marketCondition: v })} placeholder="趋势 / 震荡 / 高波动..." disabled={!canEditJournal} />
@@ -187,7 +187,7 @@ export function DailyJournalPage() {
             </div>
 
             <div className="mt-4">
-              <label className="mb-2 block text-sm font-medium text-slate-700">今日评分</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">今日评分</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button
@@ -195,7 +195,7 @@ export function DailyJournalPage() {
                     disabled={!canEditJournal}
                     onClick={() => setForm({ ...form, rating: n })}
                     className={`h-10 w-10 rounded-lg text-sm font-semibold transition-colors ${
-                      form.rating === n ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      form.rating === n ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-surface-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
                     } disabled:cursor-not-allowed`}
                   >
                     {n}
@@ -221,14 +221,14 @@ export function DailyJournalPage() {
 function Field({ label, value, onChange, placeholder, disabled }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
+        className="w-full rounded-lg border border-slate-200 dark:border-surface-700 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50 dark:bg-surface-800"
       />
     </div>
   )
@@ -237,14 +237,14 @@ function Field({ label, value, onChange, placeholder, disabled }: { label: strin
 function TextArea({ label, value, onChange, placeholder, disabled }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={3}
         disabled={disabled}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
+        className="w-full rounded-lg border border-slate-200 dark:border-surface-700 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50 dark:bg-surface-800"
       />
     </div>
   )

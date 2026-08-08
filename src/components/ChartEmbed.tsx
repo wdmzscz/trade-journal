@@ -36,7 +36,7 @@ function ChartOpenCard({
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-b from-slate-800 to-slate-900 text-center transition-all hover:border-brand-400 hover:shadow-md',
+        'group flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-surface-700 bg-gradient-to-b from-slate-800 to-slate-900 text-center transition-all hover:border-brand-400 hover:shadow-md',
         compact ? 'min-h-[9rem]' : 'min-h-[11rem]',
         className
       )}
@@ -45,7 +45,7 @@ function ChartOpenCard({
         <span className="text-[10px] font-bold uppercase tracking-wide text-slate-300">
           {slotHeading(timeframe)}
         </span>
-        <ExternalLink className="h-3 w-3 text-slate-500 group-hover:text-white" />
+        <ExternalLink className="h-3 w-3 text-slate-500 dark:text-slate-400 group-hover:text-white" />
       </div>
       <div className="flex flex-1 flex-col items-center justify-center px-3 pb-3">
         <div className="rounded-full bg-slate-700/80 p-3 group-hover:bg-brand-600/80">
@@ -83,7 +83,7 @@ function ChartImagePreview({ url, timeframe, compact, className }: ChartEmbedPro
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group block overflow-hidden rounded-lg border border-slate-200 bg-slate-900 transition-all hover:border-brand-400 hover:shadow-md',
+        'group block overflow-hidden rounded-lg border border-slate-200 dark:border-surface-700 bg-slate-900 transition-all hover:border-brand-400 hover:shadow-md',
         className
       )}
     >
@@ -91,7 +91,7 @@ function ChartImagePreview({ url, timeframe, compact, className }: ChartEmbedPro
         <span className="text-[10px] font-bold uppercase tracking-wide text-slate-300">
           {slotHeading(timeframe)}
         </span>
-        <ExternalLink className="h-3 w-3 text-slate-500 group-hover:text-white" />
+        <ExternalLink className="h-3 w-3 text-slate-500 dark:text-slate-400 group-hover:text-white" />
       </div>
       <img
         src={imageUrl}
@@ -136,7 +136,7 @@ export function ChartEmbed({ url, timeframe, compact, className }: ChartEmbedPro
   }
 
   return (
-    <div className={cn('overflow-hidden rounded-lg border border-slate-200 bg-slate-900', className)}>
+    <div className={cn('overflow-hidden rounded-lg border border-slate-200 dark:border-surface-700 bg-slate-900', className)}>
       <div className="flex items-center justify-between bg-slate-800 px-2 py-1">
         <span className="text-[10px] font-bold uppercase tracking-wide text-slate-300">
           {slotHeading(timeframe)}
@@ -153,7 +153,7 @@ export function ChartEmbed({ url, timeframe, compact, className }: ChartEmbedPro
       <iframe
         src={embedUrl}
         title={`${timeframe} chart`}
-        className={cn('w-full border-0 bg-white', compact ? 'h-36' : 'h-44 sm:h-52')}
+        className={cn('w-full border-0 bg-white dark:bg-surface-900', compact ? 'h-36' : 'h-44 sm:h-52')}
         loading="lazy"
         sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
         referrerPolicy="no-referrer-when-downgrade"

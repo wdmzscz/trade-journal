@@ -46,6 +46,7 @@ interface PlaybookRow {
   entry_price: number
   exit_price: number | null
   pnl: number | null
+  outcome: string | null
   setup: string | null
   title: string
   thesis: string | null
@@ -153,6 +154,7 @@ function rowToPlaybook(row: PlaybookRow): PlaybookEntry {
     entryPrice: Number(row.entry_price),
     exitPrice: row.exit_price != null ? Number(row.exit_price) : undefined,
     pnl: row.pnl != null ? Number(row.pnl) : undefined,
+    outcome: (row.outcome as PlaybookEntry['outcome']) ?? undefined,
     setup: row.setup ?? undefined,
     title: row.title,
     thesis: row.thesis ?? undefined,
@@ -179,6 +181,7 @@ function playbookToRow(entry: PlaybookEntry, userId: string): PlaybookRow {
     entry_price: entry.entryPrice,
     exit_price: entry.exitPrice ?? null,
     pnl: entry.pnl ?? null,
+    outcome: entry.outcome ?? null,
     setup: entry.setup ?? null,
     title: entry.title,
     thesis: entry.thesis ?? null,

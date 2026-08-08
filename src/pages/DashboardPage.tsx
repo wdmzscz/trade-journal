@@ -7,6 +7,7 @@ import {
   TrendingUp, Target, BarChart3, Percent, Activity,
 } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
+import { useTheme } from '../hooks/useTheme'
 import { StatCard } from '../components/StatCard'
 import { PnlBadge } from '../components/PnlBadge'
 import { AccountScopeBanner } from '../components/AccountScopeBanner'
@@ -21,6 +22,14 @@ import { cn } from '../utils/cn'
 
 export function DashboardPage() {
   const { filteredTrades } = useTradeStore()
+  const { resolvedTheme } = useTheme()
+  const chartGrid = resolvedTheme === 'dark' ? '#334155' : '#e2e8f0'
+  const chartTick = resolvedTheme === 'dark' ? '#94a3b8' : '#64748b'
+  const tooltipStyle = {
+    backgroundColor: resolvedTheme === 'dark' ? '#0f172a' : '#fff',
+    borderColor: resolvedTheme === 'dark' ? '#334155' : '#e2e8f0',
+    borderRadius: 8,
+  }
 
   const stats = useMemo(() => computeDashboardStats(filteredTrades), [filteredTrades])
   const performanceScore = useMemo(() => computePerformanceScore(filteredTrades), [filteredTrades])
@@ -96,10 +105,10 @@ export function DashboardPage() {
                       <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip formatter={(v: number) => [formatCurrency(v), '']} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: chartTick }} tickFormatter={(v) => v.slice(5)} />
+                  <YAxis tick={{ fontSize: 11, fill: chartTick }} tickFormatter={(v) => `$${v}`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [formatCurrency(v), '']} />
                   <Area type="monotone" dataKey="cumulative" stroke="#7c3aed" fill="url(#pnlGradient)" strokeWidth={2} name="累计盈亏" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -122,10 +131,10 @@ export function DashboardPage() {
                       <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip formatter={(v: number) => [formatCurrency(v), '']} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: chartTick }} tickFormatter={(v) => v.slice(5)} />
+                  <YAxis tick={{ fontSize: 11, fill: chartTick }} tickFormatter={(v) => `$${v}`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [formatCurrency(v), '']} />
                   <Area type="monotone" dataKey="cumulative" stroke="#7c3aed" fill="url(#pnlGradientFallback)" strokeWidth={2} name="累计盈亏" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -139,10 +148,10 @@ export function DashboardPage() {
           {dailyPnl.length > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={dailyPnl}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), '盈亏']} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: chartTick }} tickFormatter={(v) => v.slice(5)} />
+                <YAxis tick={{ fontSize: 11, fill: chartTick }} tickFormatter={(v) => `$${v}`} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [formatCurrency(v), '盈亏']} />
                 <Bar dataKey="pnl" name="盈亏" radius={[4, 4, 0, 0]}>
                   {dailyPnl.map((entry, i) => (
                     <Cell key={i} fill={entry.pnl >= 0 ? '#22c55e' : '#ef4444'} />
@@ -166,7 +175,7 @@ export function DashboardPage() {
                     <Cell key={i} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
@@ -179,10 +188,10 @@ export function DashboardPage() {
           {dayOfWeek.some((d) => d.trades > 0) ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={dayOfWeek}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-                <Tooltip formatter={(v: number, name: string) => [name === 'pnl' ? formatCurrency(v) : v, name === 'pnl' ? '盈亏' : '交易数']} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+                <XAxis dataKey="day" tick={{ fontSize: 12, fill: chartTick }} />
+                <YAxis tick={{ fontSize: 11, fill: chartTick }} tickFormatter={(v) => `$${v}`} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number, name: string) => [name === 'pnl' ? formatCurrency(v) : v, name === 'pnl' ? '盈亏' : '交易数']} />
                 <Bar dataKey="pnl" name="盈亏" radius={[4, 4, 0, 0]}>
                   {dayOfWeek.map((entry, i) => (
                     <Cell key={i} fill={entry.pnl >= 0 ? '#22c55e' : '#ef4444'} />
@@ -202,7 +211,7 @@ export function DashboardPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-slate-500">
+                  <tr className="border-b border-slate-200 dark:border-surface-700 text-left text-slate-500 dark:text-slate-400">
                     <th className="pb-2 font-medium">标的</th>
                     <th className="pb-2 font-medium">交易数</th>
                     <th className="pb-2 font-medium">胜率</th>
@@ -211,10 +220,10 @@ export function DashboardPage() {
                 </thead>
                 <tbody>
                   {symbolStats.map((s) => (
-                    <tr key={s.symbol} className="border-b border-slate-100">
-                      <td className="py-2.5 font-semibold text-slate-900">{s.symbol}</td>
-                      <td className="py-2.5 text-slate-600">{s.trades}</td>
-                      <td className="py-2.5 text-slate-600">{formatPercent(s.winRate)}</td>
+                    <tr key={s.symbol} className="border-b border-slate-100 dark:border-surface-800">
+                      <td className="py-2.5 font-semibold text-slate-900 dark:text-slate-100">{s.symbol}</td>
+                      <td className="py-2.5 text-slate-600 dark:text-slate-400">{s.trades}</td>
+                      <td className="py-2.5 text-slate-600 dark:text-slate-400">{formatPercent(s.winRate)}</td>
                       <td className="py-2.5 text-right"><PnlBadge value={s.pnl} /></td>
                     </tr>
                   ))}
@@ -231,7 +240,7 @@ export function DashboardPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-slate-500">
+                  <tr className="border-b border-slate-200 dark:border-surface-700 text-left text-slate-500 dark:text-slate-400">
                     <th className="pb-2 font-medium">策略</th>
                     <th className="pb-2 font-medium">交易数</th>
                     <th className="pb-2 font-medium">胜率</th>
@@ -240,10 +249,10 @@ export function DashboardPage() {
                 </thead>
                 <tbody>
                   {setupStats.map((s) => (
-                    <tr key={s.setup} className="border-b border-slate-100">
-                      <td className="py-2.5 font-semibold text-slate-900">{s.setup}</td>
-                      <td className="py-2.5 text-slate-600">{s.trades}</td>
-                      <td className="py-2.5 text-slate-600">{formatPercent(s.winRate)}</td>
+                    <tr key={s.setup} className="border-b border-slate-100 dark:border-surface-800">
+                      <td className="py-2.5 font-semibold text-slate-900 dark:text-slate-100">{s.setup}</td>
+                      <td className="py-2.5 text-slate-600 dark:text-slate-400">{s.trades}</td>
+                      <td className="py-2.5 text-slate-600 dark:text-slate-400">{formatPercent(s.winRate)}</td>
                       <td className="py-2.5 text-right"><PnlBadge value={s.pnl} /></td>
                     </tr>
                   ))}
@@ -261,7 +270,7 @@ export function DashboardPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-500">
+                <tr className="border-b border-slate-200 dark:border-surface-700 text-left text-slate-500 dark:text-slate-400">
                   <th className="pb-2 font-medium">日期</th>
                   <th className="pb-2 font-medium">标的</th>
                   <th className="pb-2 font-medium">方向</th>
@@ -272,17 +281,17 @@ export function DashboardPage() {
               </thead>
               <tbody>
                 {recentTrades.map((t) => (
-                  <tr key={t.id} className="border-b border-slate-100">
-                    <td className="py-2.5 text-slate-600">{t.entryDate.slice(0, 10)}</td>
+                  <tr key={t.id} className="border-b border-slate-100 dark:border-surface-800">
+                    <td className="py-2.5 text-slate-600 dark:text-slate-400">{t.entryDate.slice(0, 10)}</td>
                     <td className="py-2.5 font-semibold">{t.symbol}</td>
                     <td className="py-2.5">
-                      <span className={t.side === 'long' ? 'text-emerald-600' : 'text-red-500'}>
+                      <span className={t.side === 'long' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}>
                         {t.side === 'long' ? '做多' : '做空'}
                       </span>
                     </td>
-                    <td className="py-2.5 text-slate-600">{t.setup ?? '-'}</td>
+                    <td className="py-2.5 text-slate-600 dark:text-slate-400">{t.setup ?? '-'}</td>
                     <td className="py-2.5">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${t.status === 'closed' ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${t.status === 'closed' ? 'bg-slate-100 dark:bg-surface-800 text-slate-600 dark:text-slate-400' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-700'}`}>
                         {t.status === 'closed' ? '已平仓' : '持仓中'}
                       </span>
                     </td>
@@ -304,8 +313,8 @@ export function DashboardPage() {
 
 function ChartCard({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-surface-200 bg-white p-5 shadow-sm ${className}`}>
-      <h3 className="mb-4 text-sm font-semibold text-slate-700">{title}</h3>
+    <div className={`rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm ${className}`}>
+      <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">{title}</h3>
       {children}
     </div>
   )

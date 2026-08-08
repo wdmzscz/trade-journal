@@ -4,6 +4,7 @@ import { Menu, X, TrendingUp } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { AccountTabs } from './AccountTabs'
 import { MobileNav } from './MobileNav'
+import { ThemeToggle } from './ThemeToggle'
 import { useTradeStore } from '../hooks/useTradeStore'
 
 export function Layout() {
@@ -11,7 +12,7 @@ export function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <div className="flex min-h-screen bg-surface-50">
+    <div className="flex min-h-screen bg-surface-50 dark:bg-surface-950">
       {/* Desktop sidebar */}
       <div className="hidden lg:flex">
         <Sidebar />
@@ -42,21 +43,22 @@ export function Layout() {
 
       <main className="flex min-w-0 flex-1 flex-col overflow-auto">
         {/* Mobile top bar */}
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur-md pt-safe lg:hidden">
+        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur-md pt-safe dark:border-surface-800 dark:bg-surface-950/95 lg:hidden">
           <button
             type="button"
             onClick={() => setMobileMenuOpen(true)}
-            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-surface-800"
             aria-label="打开菜单"
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="rounded-lg bg-brand-600 p-1.5">
               <TrendingUp className="h-4 w-4 text-white" />
             </div>
-            <span className="font-bold text-slate-900">Trade Journal</span>
+            <span className="truncate font-bold text-slate-900 dark:text-slate-100">Trade Journal</span>
           </div>
+          <ThemeToggle variant="header" />
         </header>
 
         <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-3 py-4 sm:px-5 sm:py-5 lg:px-8 lg:py-8 pb-nav-safe">

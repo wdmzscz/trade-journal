@@ -7,6 +7,22 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="#7c3aed" />
     <title>Trade Journal</title>
+    <script>
+      try {
+        var pref = localStorage.getItem('trade-journal-theme-v2')
+        var dark =
+          pref === 'dark' ||
+          ((pref === 'system' || pref == null) &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)
+        if (dark) {
+          document.documentElement.classList.add('dark')
+          document.documentElement.style.colorScheme = 'dark'
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0f172a')
+        } else {
+          document.documentElement.style.colorScheme = 'light'
+        }
+      } catch (_) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

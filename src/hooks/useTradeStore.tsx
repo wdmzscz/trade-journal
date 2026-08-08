@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType, PlaybookEntry } from '../types'
+import { playbookOutcomeFromPnl } from '../types'
 import { calculateTradePnl, resolveStartingCapital } from '../utils/stats'
 import { mergeTrades } from '../utils/storage'
 import { mergeIbkrFinancials, type IbkrAccountFinancials } from '../utils/ibkrImport'
@@ -712,6 +713,7 @@ export function TradeStoreProvider({
         ...input,
         id: existing?.id ?? uuidv4(),
         charts: normalizeChartLinks(input.charts),
+        outcome: input.outcome ?? existing?.outcome ?? playbookOutcomeFromPnl(input.pnl),
         pinned: input.pinned ?? existing?.pinned ?? false,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -781,6 +783,9 @@ export function TradeStoreProvider({
         ])
       : mergePlaybookChartSlots()
 
+    const outcome = playbookOutcomeFromPnl(trade.pnl) ?? 'breakeven'
+    const caseLabel = outcome === 'win' ? '盈利案例' : outcome === 'loss' ? '亏损案例' : '持平案例'
+
     const entry: PlaybookEntry = {
       id: uuidv4(),
       tradeId: trade.id,
@@ -792,12 +797,13 @@ export function TradeStoreProvider({
       entryPrice: trade.entryPrice,
       exitPrice: trade.exitPrice,
       pnl: trade.pnl,
+      outcome,
       setup: trade.setup,
-      title: `${trade.symbol} ${trade.setup ?? '盈利案例'}`,
+      title: `${trade.symbol} ${trade.setup ?? caseLabel}`,
       thesis: trade.notes,
       journalDate: trade.entryDate.slice(0, 10),
       charts,
-      tags: [...trade.tags, 'playbook'],
+      tags: [...trade.tags, 'playbook', outcome],
       pinned: false,
       createdAt: now,
       updatedAt: now,

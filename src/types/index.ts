@@ -63,6 +63,20 @@ export function emptyPlaybookCharts(): ChartLink[] {
   return PLAYBOOK_TIMEFRAMES.map((timeframe) => ({ timeframe, url: '' }))
 }
 
+/** 案例结果：盈利复盘 / 亏损复盘 */
+export type PlaybookOutcome = 'win' | 'loss' | 'breakeven'
+
+export function playbookOutcomeFromPnl(pnl?: number | null): PlaybookOutcome | undefined {
+  if (pnl == null || Number.isNaN(Number(pnl))) return undefined
+  if (pnl > 0) return 'win'
+  if (pnl < 0) return 'loss'
+  return 'breakeven'
+}
+
+export function resolvePlaybookOutcome(entry: Pick<PlaybookEntry, 'outcome' | 'pnl'>): PlaybookOutcome | undefined {
+  return entry.outcome ?? playbookOutcomeFromPnl(entry.pnl)
+}
+
 export interface PlaybookEntry {
   id: string
   tradeId?: string
@@ -74,6 +88,8 @@ export interface PlaybookEntry {
   entryPrice: number
   exitPrice?: number
   pnl?: number
+  /** 盈利 / 亏损案例；旧数据可从 pnl 推断 */
+  outcome?: PlaybookOutcome
   setup?: string
   title: string
   thesis?: string

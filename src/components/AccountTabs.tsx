@@ -28,7 +28,7 @@ import type { AccountInfo, AccountType } from '../types'
 const TYPE_META: Record<AccountType, { icon: typeof TrendingUp; badge: string; color: string }> = {
   futures: { icon: TrendingUp, badge: '期货', color: 'text-amber-600' },
   stock: { icon: LineChart, badge: '股票', color: 'text-sky-600' },
-  other: { icon: Wallet, badge: '其他', color: 'text-slate-500' },
+  other: { icon: Wallet, badge: '其他', color: 'text-slate-500 dark:text-slate-400' },
 }
 
 type ModalMode = 'add' | 'edit' | 'manage' | null
@@ -138,7 +138,7 @@ export function AccountTabs() {
 
   return (
     <>
-      <div className="sticky top-0 z-20 -mx-3 -mt-4 border-b border-slate-200 bg-[#e8eaed] px-2 sm:-mx-5 sm:px-3 lg:-mx-8 lg:-mt-8 lg:px-4">
+      <div className="sticky top-0 z-20 -mx-3 -mt-4 border-b border-slate-200 dark:border-surface-700 bg-[#e8eaed] dark:bg-surface-800 px-2 sm:-mx-5 sm:px-3 lg:-mx-8 lg:-mt-8 lg:px-4">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -153,7 +153,7 @@ export function AccountTabs() {
               title="全部账户"
               subtitle={`${allTrades} 笔 · ${formatCurrency(allPnl)}`}
               badge="汇总"
-              badgeColor="text-brand-600"
+              badgeColor="text-brand-600 dark:text-brand-400"
             />
 
             <SortableContext items={accountIds} strategy={horizontalListSortingStrategy}>
@@ -174,7 +174,7 @@ export function AccountTabs() {
                     badgeColor={meta.color}
                     trailing={
                       account.tradeCount > 0 ? (
-                        <span className={cn('text-[10px] font-semibold', (computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl) >= 0 ? 'text-emerald-600' : 'text-red-500')}>
+                        <span className={cn('text-[10px] font-semibold', (computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400')}>
                           {formatCurrency(computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl)}
                         </span>
                       ) : (
@@ -189,7 +189,7 @@ export function AccountTabs() {
           <button
             onClick={openAdd}
             title="添加账户"
-            className="mb-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-t-lg text-slate-500 transition-colors hover:bg-white/60 hover:text-brand-600"
+            className="mb-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-t-lg text-slate-500 transition-colors hover:bg-white/60 hover:text-brand-600 dark:text-slate-400 dark:hover:bg-surface-800/60 dark:hover:text-brand-400"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -199,14 +199,14 @@ export function AccountTabs() {
               <button
                 onClick={openManage}
                 title="账户管理"
-                className="mb-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-t-lg text-slate-500 transition-colors hover:bg-white/60 hover:text-slate-700 sm:hidden"
+                className="mb-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-t-lg text-slate-500 transition-colors hover:bg-white/60 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-surface-800/60 dark:hover:text-slate-200 sm:hidden"
               >
                 <Settings2 className="h-4 w-4" />
               </button>
               <button
                 onClick={openManage}
                 title="账户管理"
-                className="mb-0.5 hidden shrink-0 items-center gap-1.5 rounded-t-lg px-2 text-xs font-medium text-slate-500 transition-colors hover:bg-white/60 hover:text-slate-700 sm:flex sm:px-3"
+                className="mb-0.5 hidden shrink-0 items-center gap-1.5 rounded-t-lg px-2 text-xs font-medium text-slate-500 transition-colors hover:bg-white/60 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-surface-800/60 dark:hover:text-slate-200 sm:flex sm:px-3"
               >
                 <Settings2 className="h-3.5 w-3.5" />
                 管理
@@ -244,7 +244,7 @@ export function AccountTabs() {
         <AccountModal title="编辑账户" onClose={closeModal}>
           <div className="space-y-4">
             <Field label="账户 ID">
-              <input value={formId} disabled className="form-input cursor-not-allowed bg-slate-50 text-slate-500" />
+              <input value={formId} disabled className="form-input cursor-not-allowed bg-slate-50 dark:bg-surface-800 text-slate-500 dark:text-slate-400" />
             </Field>
             <Field label="显示名称">
               <input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="期货账户" className="form-input" autoFocus />
@@ -273,30 +273,30 @@ export function AccountTabs() {
               />
             </Field>
 
-            <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            <div className="rounded-lg bg-slate-50 dark:bg-surface-800 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
               {editingAccount.tradeCount} 笔交易 · {editingJournalCount} 条日记
             </div>
           </div>
 
           <ModalActions primaryLabel="保存" onPrimary={handleSaveEdit} onCancel={closeModal} />
 
-          <div className="mt-6 border-t border-slate-100 pt-4">
+          <div className="mt-6 border-t border-slate-100 dark:border-surface-800 pt-4">
             {!confirmDelete ? (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 dark:border-red-800 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40"
               >
                 <Trash2 className="h-4 w-4" />
                 删除此账户
               </button>
             ) : (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+              <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 p-4">
                 <p className="text-sm font-medium text-red-800">确定删除「{editingAccount.label}」？</p>
-                <p className="mt-1 text-xs text-red-600">
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                   将同时删除 {editingAccount.tradeCount} 笔交易和 {editingJournalCount} 条日记，此操作不可撤销。
                 </p>
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => setConfirmDelete(false)} className="flex-1 rounded-lg border border-red-200 bg-white py-2 text-sm text-slate-600 hover:bg-slate-50">
+                  <button onClick={() => setConfirmDelete(false)} className="flex-1 rounded-lg border border-red-200 dark:border-red-800 bg-white dark:bg-surface-900 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-surface-800 dark:bg-surface-800">
                     取消
                   </button>
                   <button onClick={handleDelete} className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700">
@@ -320,13 +320,13 @@ export function AccountTabs() {
               return (
                 <div
                   key={account.id}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 hover:bg-slate-50"
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-surface-700 p-3 hover:bg-slate-50 dark:hover:bg-surface-800 dark:bg-surface-800"
                 >
-                  <div className={cn('rounded-lg bg-slate-100 p-2', meta.color)}>
+                  <div className={cn('rounded-lg bg-slate-100 dark:bg-surface-800 p-2', meta.color)}>
                     <Icon className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-slate-900">{account.label}</p>
+                    <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{account.label}</p>
                     <p className="truncate text-xs text-slate-400">
                       {account.id} · {meta.badge} · {account.tradeCount} 笔交易 · {journalCount} 条日记
                     </p>
@@ -334,7 +334,7 @@ export function AccountTabs() {
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       onClick={() => openEditAccount(account)}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-white hover:text-brand-600"
+                      className="rounded-lg p-2 text-slate-400 hover:bg-white dark:hover:bg-surface-800 dark:bg-surface-900 hover:text-brand-600 dark:text-brand-400"
                       title="编辑"
                     >
                       <Pencil className="h-4 w-4" />
@@ -345,7 +345,7 @@ export function AccountTabs() {
                           deleteAccount(account.id)
                         }
                       }}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-white hover:text-red-500"
+                      className="rounded-lg p-2 text-slate-400 hover:bg-white dark:hover:bg-surface-800 dark:bg-surface-900 hover:text-red-500 dark:text-red-400"
                       title="删除"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -357,7 +357,7 @@ export function AccountTabs() {
           </div>
           <button
             onClick={() => { closeModal(); openAdd() }}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-600 hover:border-brand-400 hover:text-brand-600"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 dark:border-surface-600 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:border-brand-400 hover:text-brand-600 dark:text-brand-400"
           >
             <Plus className="h-4 w-4" />
             添加新账户
@@ -448,8 +448,8 @@ const TabButton = forwardRef<HTMLButtonElement, TabButtonProps>(function TabButt
         sortable && 'cursor-grab active:cursor-grabbing',
         isDragging && 'z-30 cursor-grabbing shadow-lg',
         active
-          ? 'z-10 border-slate-200 border-b-white bg-white shadow-[0_-1px_3px_rgba(0,0,0,0.04)]'
-          : 'border-transparent bg-white/40 text-slate-600 hover:bg-white/70'
+          ? 'z-10 border-slate-200 border-b-white bg-white shadow-[0_-1px_3px_rgba(0,0,0,0.04)] dark:border-surface-700 dark:border-b-surface-950 dark:bg-surface-950'
+          : 'border-transparent bg-white/40 text-slate-600 hover:bg-white/70 dark:bg-surface-800/40 dark:text-slate-400 dark:hover:bg-surface-800/70'
       )}
     >
       {onEdit && (
@@ -463,16 +463,16 @@ const TabButton = forwardRef<HTMLButtonElement, TabButtonProps>(function TabButt
           className={cn(
             'absolute right-2 top-2 rounded-md p-0.5 transition-colors',
             active
-              ? 'text-slate-400 hover:bg-slate-100 hover:text-brand-600'
-              : 'text-transparent group-hover:text-slate-400 group-hover:hover:bg-white/80 group-hover:hover:text-brand-600'
+              ? 'text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-surface-800 dark:hover:text-brand-400'
+              : 'text-transparent group-hover:text-slate-400 group-hover:hover:bg-white/80 group-hover:hover:text-brand-600 dark:group-hover:hover:bg-surface-800 dark:group-hover:hover:text-brand-400'
           )}
         >
           <Pencil className="h-3 w-3" />
         </span>
       )}
       <div className="flex items-center gap-2 pr-4">
-        <Icon className={cn('h-3.5 w-3.5 shrink-0', active ? badgeColor : 'text-slate-400 group-hover:text-slate-500')} />
-        <span className={cn('truncate text-sm font-semibold', active ? 'text-slate-900' : 'text-slate-600')}>
+        <Icon className={cn('h-3.5 w-3.5 shrink-0', active ? badgeColor : 'text-slate-400 group-hover:text-slate-500 dark:text-slate-400')} />
+        <span className={cn('truncate text-sm font-semibold', active ? 'text-slate-900 dark:text-slate-100' : 'text-slate-600 dark:text-slate-400')}>
           {title}
         </span>
       </div>
@@ -503,8 +503,8 @@ function TypePicker({ value, onChange }: { value: AccountType; onChange: (v: Acc
               className={cn(
                 'flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 text-xs font-medium transition-all',
                 value === type
-                  ? 'border-brand-500 bg-brand-50 text-brand-700'
-                  : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                  ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300'
+                  : 'border-slate-200 dark:border-surface-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:border-surface-600 hover:bg-slate-50 dark:hover:bg-surface-800 dark:bg-surface-800'
               )}
             >
               <Icon className="h-4 w-4" />
@@ -520,10 +520,10 @@ function TypePicker({ value, onChange }: { value: AccountType; onChange: (v: Acc
 function AccountModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-6 shadow-2xl">
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">{title}</h2>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-surface-800 dark:bg-surface-800 hover:text-slate-600 dark:text-slate-400">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -546,7 +546,7 @@ function ModalActions({
 }) {
   return (
     <div className="mt-6 flex gap-3">
-      <button onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+      <button onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 dark:border-surface-700 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-surface-800 dark:bg-surface-800">
         取消
       </button>
       <button
@@ -562,15 +562,15 @@ function ModalActions({
 
 function ImportHint({ onClose }: { onClose: () => void }) {
   return (
-    <div className="mt-4 rounded-lg bg-slate-50 p-3">
-      <p className="text-xs text-slate-500">
+    <div className="mt-4 rounded-lg bg-slate-50 dark:bg-surface-800 p-3">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         添加后，前往
-        <Link to="/import" onClick={onClose} className="mx-1 font-medium text-brand-600 hover:underline">
+        <Link to="/import" onClick={onClose} className="mx-1 font-medium text-brand-600 dark:text-brand-400 hover:underline">
           Import CSV
         </Link>
         导入该账户的交易数据。
       </p>
-      <Link to="/import" onClick={onClose} className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700">
+      <Link to="/import" onClick={onClose} className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:text-brand-300">
         <Upload className="h-3.5 w-3.5" />
         立即导入 CSV
       </Link>
@@ -581,7 +581,7 @@ function ImportHint({ onClose }: { onClose: () => void }) {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
       {hint && <p className="mb-1.5 text-xs text-slate-400">{hint}</p>}
       {children}
     </div>

@@ -107,8 +107,8 @@ export function IbkrSyncPage() {
     return (
       <div className="mx-auto max-w-2xl space-y-4">
         <h1 className="page-title">IBKR 自动同步</h1>
-        <p className="text-sm text-slate-600">需要启用 Supabase 云端模式才能使用 IBKR API 同步。</p>
-        <Link to="/import" className="text-brand-600 hover:underline">← 返回 CSV 导入</Link>
+        <p className="text-sm text-slate-600 dark:text-slate-400">需要启用 Supabase 云端模式才能使用 IBKR API 同步。</p>
+        <Link to="/import" className="text-brand-600 dark:text-brand-400 hover:underline">← 返回 CSV 导入</Link>
       </div>
     )
   }
@@ -130,7 +130,7 @@ export function IbkrSyncPage() {
         </p>
       </div>
 
-      <div className="rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm text-brand-900">
+      <div className="rounded-xl border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/40 p-4 text-sm text-brand-900 dark:text-brand-100">
         <p className="font-semibold">免费说明</p>
         <p className="mt-1">
           IBKR Flex API 对账户持有人<strong>免费</strong>。不是实时推送，但可设置每小时或每天自动同步；
@@ -140,14 +140,14 @@ export function IbkrSyncPage() {
           href="https://github.com/wdmzscz/trade-journal/blob/master/IBKR_SYNC.md"
           target="_blank"
           rel="noreferrer"
-          className="mt-2 inline-flex items-center gap-1 text-brand-700 hover:underline"
+          className="mt-2 inline-flex items-center gap-1 text-brand-700 dark:text-brand-300 hover:underline"
         >
           查看完整配置教程 <ExternalLink className="h-3.5 w-3.5" />
         </a>
       </div>
 
       {settings?.last_sync_at && (
-        <div className="rounded-xl border border-surface-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-4 shadow-sm">
           <div className="flex items-start gap-3">
             {settings.last_sync_status === 'success' ? (
               <CheckCircle className="mt-0.5 h-5 w-5 text-emerald-500" />
@@ -155,52 +155,67 @@ export function IbkrSyncPage() {
               <AlertCircle className="mt-0.5 h-5 w-5 text-amber-500" />
             )}
             <div className="text-sm">
-              <p className="font-medium text-slate-900">上次同步</p>
-              <p className="mt-1 text-slate-600">
+              <p className="font-medium text-slate-900 dark:text-slate-100">上次同步</p>
+              <p className="mt-1 text-slate-600 dark:text-slate-400">
                 {new Date(settings.last_sync_at).toLocaleString('zh-CN')}
                 {settings.last_sync_added != null && (
-                  <span> · 新增 {settings.last_sync_added} 笔 · 跳过 {settings.last_sync_skipped ?? 0} 笔</span>
+                  <span>
+                    {' '}
+                    · 写入 {settings.last_sync_added} 笔
+                    {settings.last_sync_skipped != null && settings.last_sync_skipped > 0
+                      ? ` · 替换旧记录 ${settings.last_sync_skipped} 笔`
+                      : ''}
+                  </span>
                 )}
               </p>
               {settings.last_sync_message && (
-                <p className="mt-1 text-slate-500">{settings.last_sync_message}</p>
+                <p
+                  className={cn(
+                    'mt-1',
+                    settings.last_sync_status === 'error'
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-slate-500 dark:text-slate-400'
+                  )}
+                >
+                  {settings.last_sync_message}
+                </p>
               )}
             </div>
           </div>
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-4 rounded-xl border border-surface-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-800">Flex 凭证</h2>
+      <form onSubmit={handleSave} className="space-y-4 rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Flex 凭证</h2>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700">Flex Token</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Flex Token</label>
           <input
             type="password"
             value={flexToken}
             onChange={(e) => setFlexToken(e.target.value)}
             placeholder="在 IBKR Client Portal 生成"
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="mt-1 w-full rounded-lg border border-slate-200 dark:border-surface-700 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             在 IBKR 生成新 Token 后粘贴到此处；点「立即同步」会先保存再请求 IBKR。
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700">Flex Query ID</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Flex Query ID</label>
           <input
             type="text"
             value={flexQueryId}
             onChange={(e) => setFlexQueryId(e.target.value)}
             placeholder="活动账单 Flex Query 的 ID"
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="mt-1 w-full rounded-lg border border-slate-200 dark:border-surface-700 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </div>
 
-        <div className="border-t border-slate-100 pt-4">
-          <h2 className="text-sm font-semibold text-slate-800">自动同步频率</h2>
-          <p className="mt-1 text-xs text-slate-500">
+        <div className="border-t border-slate-100 dark:border-surface-800 pt-4">
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">自动同步频率</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             开启后由 GitHub Actions 定时调用（需在仓库 Secrets 配置 CRON_SECRET，见教程）
           </p>
 
@@ -209,7 +224,7 @@ export function IbkrSyncPage() {
               type="checkbox"
               checked={autoSync}
               onChange={(e) => setAutoSync(e.target.checked)}
-              className="rounded border-slate-300"
+              className="rounded border-slate-300 dark:border-surface-600"
             />
             启用自动同步
           </label>
@@ -224,7 +239,7 @@ export function IbkrSyncPage() {
                 key={value}
                 className={cn(
                   'cursor-pointer rounded-lg border-2 p-3 text-sm transition-colors',
-                  syncInterval === value ? 'border-brand-500 bg-brand-50' : 'border-slate-200',
+                  syncInterval === value ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/40' : 'border-slate-200 dark:border-surface-700',
                   !autoSync && 'opacity-50'
                 )}
               >
@@ -238,7 +253,7 @@ export function IbkrSyncPage() {
                   className="sr-only"
                 />
                 <p className="font-medium">{label}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{desc}</p>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{desc}</p>
               </label>
             ))}
           </div>
@@ -248,7 +263,7 @@ export function IbkrSyncPage() {
           <div
             className={cn(
               'rounded-lg px-3 py-2 text-sm',
-              message.type === 'ok' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
+              message.type === 'ok' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800' : 'bg-red-50 dark:bg-red-950/40 text-red-700'
             )}
           >
             {message.text}
@@ -267,7 +282,7 @@ export function IbkrSyncPage() {
             type="button"
             onClick={handleSyncNow}
             disabled={syncing || !flexToken || !flexQueryId}
-            className="inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-brand-200 dark:border-brand-800 bg-white dark:bg-surface-900 px-4 py-2.5 text-sm font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:bg-brand-950/40 disabled:opacity-50"
           >
             <RefreshCw className={cn('h-4 w-4', syncing && 'animate-spin')} />
             {syncing ? '同步中…' : '立即同步'}
@@ -275,8 +290,8 @@ export function IbkrSyncPage() {
         </div>
       </form>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 space-y-2">
-        <p className="flex items-center gap-1.5 font-medium text-slate-700">
+      <div className="rounded-xl border border-slate-200 dark:border-surface-700 bg-slate-50 dark:bg-surface-800 p-4 text-xs text-slate-600 dark:text-slate-400 space-y-2">
+        <p className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
           <Clock className="h-3.5 w-3.5" /> 关于「实时」
         </p>
         <p>
@@ -289,7 +304,7 @@ export function IbkrSyncPage() {
         </p>
       </div>
 
-      <Link to="/import" className="inline-block text-sm text-slate-500 hover:text-brand-600">
+      <Link to="/import" className="inline-block text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:text-brand-400">
         ← 仍可使用 CSV 手动导入
       </Link>
     </div>

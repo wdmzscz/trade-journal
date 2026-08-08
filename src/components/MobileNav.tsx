@@ -12,7 +12,7 @@ const items = [
 
 export function MobileNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md pb-safe lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md pb-safe dark:border-surface-800 dark:bg-surface-950/95 lg:hidden">
       <div className="mx-auto flex max-w-lg items-stretch justify-around">
         {items.map(({ to, label, icon: Icon, end }) => (
           <NavLink
@@ -22,7 +22,7 @@ export function MobileNav() {
             className={({ isActive }) =>
               cn(
                 'flex min-h-[52px] min-w-[64px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-medium transition-colors',
-                isActive ? 'text-brand-600' : 'text-slate-500'
+                isActive ? 'text-brand-600 dark:text-brand-400' : 'text-slate-500 dark:text-slate-400'
               )
             }
           >

@@ -17,21 +17,36 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || secrets.IBKR_TRADE }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$CRON_SECRET" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "::error::Missing secrets: need VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, and CRON_SECRET"
+          set -euo pipefail
+          missing=0
+          [ -n "${SUPABASE_URL:-}" ] || missing=1
+          [ -n "${CRON_SECRET:-}" ] || missing=1
+          [ -n "${SUPABASE_ANON_KEY:-}" ] || missing=1
+          if [ "$missing" -eq 1 ]; then
+            echo "Missing required GitHub secrets: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, CRON_SECRET"
             exit 1
           fi
+
           echo "Triggering daily IBKR sync..."
           resp=$(curl -sS -w "\n%{http_code}" -X POST "${SUPABASE_URL}/functions/v1/sync-ibkr?interval=daily" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "x-cron-secret: ${CRON_SECRET}" \
             -H "Content-Type: application/json")
-          body=$(echo "$resp" | head -n -1)
-          code=$(echo "$resp" | tail -n 1)
+          body=$(printf '%s' "$resp" | head -n -1)
+          code=$(printf '%s' "$resp" | tail -n 1)
           echo "HTTP $code"
           echo "$body"
+
           if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
-            echo "::error::sync-ibkr failed with HTTP $code"
+            echo "sync-ibkr returned HTTP $code"
             exit 1
           fi
+
+          # Edge Function 对单用户失败仍可能返回 HTTP 200，需检查 results[].ok
+          if printf '%s' "$body" | grep -q '"ok":false'; then
+            echo "One or more user syncs failed (ok:false in results)"
+            exit 1
+          fi
+
+          echo "Daily IBKR sync completed"

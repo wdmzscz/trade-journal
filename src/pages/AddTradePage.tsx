@@ -81,13 +81,13 @@ export function AddTradePage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Add Trade</h1>
-        <p className="mt-1 text-sm text-slate-500">手动添加一笔交易记录</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Add Trade</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">手动添加一笔交易记录</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <section className="rounded-xl border border-surface-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">基本信息</h2>
+        <section className="rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-6 shadow-sm">
+          <h2 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">基本信息</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="标的 Symbol *" error={errors.symbol}>
               <input
@@ -118,7 +118,7 @@ export function AddTradePage() {
                     className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
                       form.side === s
                         ? s === 'long' ? 'bg-emerald-600 text-white' : 'bg-red-500 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        : 'bg-slate-100 dark:bg-surface-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
                     }`}
                   >
                     {s === 'long' ? '做多 Long' : '做空 Short'}
@@ -135,7 +135,7 @@ export function AddTradePage() {
                     type="button"
                     onClick={() => setForm({ ...form, status: s })}
                     className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
-                      form.status === s ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      form.status === s ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-surface-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
                     }`}
                   >
                     {s === 'closed' ? '已平仓' : '持仓中'}
@@ -146,8 +146,8 @@ export function AddTradePage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-surface-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">价格与数量</h2>
+        <section className="rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-6 shadow-sm">
+          <h2 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">价格与数量</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="入场日期时间">
               <input type="datetime-local" value={form.entryDate} onChange={(e) => setForm({ ...form, entryDate: e.target.value })} className="form-input" />
@@ -179,14 +179,14 @@ export function AddTradePage() {
           </div>
 
           {previewPnl !== null && (
-            <div className={`mt-4 rounded-lg p-3 text-center text-sm font-semibold ${previewPnl >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+            <div className={`mt-4 rounded-lg p-3 text-center text-sm font-semibold ${previewPnl >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400'}`}>
               预计盈亏: {previewPnl >= 0 ? '+' : ''}${previewPnl.toFixed(2)}
             </div>
           )}
         </section>
 
-        <section className="rounded-xl border border-surface-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">策略与笔记</h2>
+        <section className="rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-6 shadow-sm">
+          <h2 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">策略与笔记</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="策略 Setup">
               <select value={form.setup} onChange={(e) => setForm({ ...form, setup: e.target.value })} className="form-input">
@@ -219,7 +219,7 @@ export function AddTradePage() {
           <button type="submit" className="flex-1 rounded-lg bg-brand-600 py-3 text-sm font-semibold text-white hover:bg-brand-700">
             保存交易
           </button>
-          <button type="button" onClick={() => navigate('/trades')} className="rounded-lg border border-slate-200 px-6 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50">
+          <button type="button" onClick={() => navigate('/trades')} className="rounded-lg border border-slate-200 dark:border-surface-700 px-6 py-3 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-surface-800 dark:bg-surface-800">
             取消
           </button>
         </div>
@@ -231,9 +231,9 @@ export function AddTradePage() {
 function FormField({ label, error, children, className = '' }: { label: string; error?: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
       {children}
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{error}</p>}
     </div>
   )
 }

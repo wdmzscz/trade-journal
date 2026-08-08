@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { StorageInfo } from './StorageInfo'
+import { ThemeToggle } from './ThemeToggle'
 import { useAuth } from '../hooks/useAuth'
 import { isCloudEnabled } from '../lib/supabase'
 
@@ -66,6 +67,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="border-t border-surface-800 p-3 sm:p-4 space-y-3">
+        <ThemeToggle variant="sidebar" />
         <StorageInfo variant="dark" />
         {cloud && (
           <button
