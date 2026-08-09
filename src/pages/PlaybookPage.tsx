@@ -16,6 +16,7 @@ import {
 } from '../types'
 import { countValidCharts, mergePlaybookChartSlots, validatePlaybookCharts } from '../utils/chartLinks'
 import { formatCurrency } from '../utils/stats'
+import { isLosingTrade, isWinningTrade } from '../utils/stats'
 import { cn } from '../utils/cn'
 
 const EMPTY_FORM = {
@@ -95,7 +96,7 @@ export function PlaybookPage() {
 
   const pickerCandidates = useMemo(
     () => closedCandidates
-      .filter((t) => (pickerTab === 'win' ? t.pnl > 0 : t.pnl < 0))
+      .filter((t) => (pickerTab === 'win' ? isWinningTrade(t.pnl) : isLosingTrade(t.pnl)))
       .slice(0, 50),
     [closedCandidates, pickerTab]
   )

@@ -63,14 +63,16 @@ export function emptyPlaybookCharts(): ChartLink[] {
   return PLAYBOOK_TIMEFRAMES.map((timeframe) => ({ timeframe, url: '' }))
 }
 
+/** |盈亏| ≤ 此阈值视为 BE（手续费/滑点导致止损难正好为 0） */
+export const BREAKEVEN_PNL_THRESHOLD = 10
+
 /** 案例结果：盈利复盘 / 亏损复盘 */
 export type PlaybookOutcome = 'win' | 'loss' | 'breakeven'
 
 export function playbookOutcomeFromPnl(pnl?: number | null): PlaybookOutcome | undefined {
   if (pnl == null || Number.isNaN(Number(pnl))) return undefined
-  if (pnl > 0) return 'win'
-  if (pnl < 0) return 'loss'
-  return 'breakeven'
+  if (Math.abs(pnl) <= BREAKEVEN_PNL_THRESHOLD) return 'breakeven'
+  return pnl > 0 ? 'win' : 'loss'
 }
 
 export function resolvePlaybookOutcome(entry: Pick<PlaybookEntry, 'outcome' | 'pnl'>): PlaybookOutcome | undefined {

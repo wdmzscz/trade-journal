@@ -21,6 +21,7 @@ import type {
   CalendarWeekRow,
   PerformanceScore,
 } from '../types'
+import { BREAKEVEN_PNL_THRESHOLD } from '../types'
 
 export function formatCurrency(value: number): string {
   const sign = value >= 0 ? '' : '-'
@@ -79,11 +80,33 @@ export function calculateTradePnl(
   return gross - fees
 }
 
+/** |盈亏| ≤ BREAKEVEN_PNL_THRESHOLD 视为 BE（手续费/滑点导致止损难正好为 0） */
+export { BREAKEVEN_PNL_THRESHOLD }
+
+export type TradeOutcome = 'win' | 'loss' | 'breakeven'
+
+export function classifyTradeOutcome(pnl: number): TradeOutcome {
+  if (Math.abs(pnl) <= BREAKEVEN_PNL_THRESHOLD) return 'breakeven'
+  return pnl > 0 ? 'win' : 'loss'
+}
+
+export function isWinningTrade(pnl: number): boolean {
+  return classifyTradeOutcome(pnl) === 'win'
+}
+
+export function isLosingTrade(pnl: number): boolean {
+  return classifyTradeOutcome(pnl) === 'loss'
+}
+
+export function isBreakevenTrade(pnl: number): boolean {
+  return classifyTradeOutcome(pnl) === 'breakeven'
+}
+
 export function computeDashboardStats(trades: Trade[]): DashboardStats {
   const closed = trades.filter((t) => t.status === 'closed')
-  const winners = closed.filter((t) => t.pnl > 0)
-  const losers = closed.filter((t) => t.pnl < 0)
-  const breakEven = closed.filter((t) => t.pnl === 0)
+  const winners = closed.filter((t) => isWinningTrade(t.pnl))
+  const losers = closed.filter((t) => isLosingTrade(t.pnl))
+  const breakEven = closed.filter((t) => isBreakevenTrade(t.pnl))
 
   const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
   const grossProfit = winners.reduce((sum, t) => sum + t.pnl, 0)
@@ -91,7 +114,8 @@ export function computeDashboardStats(trades: Trade[]): DashboardStats {
 
   const avgWin = winners.length ? grossProfit / winners.length : 0
   const avgLoss = losers.length ? grossLoss / losers.length : 0
-  const winRate = closed.length ? (winners.length / closed.length) * 100 : 0
+  const decisive = winners.length + losers.length
+  const winRate = decisive ? (winners.length / decisive) * 100 : 0
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0
   const expectancy = closed.length ? totalPnl / closed.length : 0
 
@@ -225,13 +249,14 @@ export function computePerformanceScore(trades: Trade[]): PerformanceScore | nul
   const closed = trades.filter((t) => t.status === 'closed')
   if (closed.length < 3) return null
 
-  const winners = closed.filter((t) => t.pnl > 0)
-  const losers = closed.filter((t) => t.pnl < 0)
+  const winners = closed.filter((t) => isWinningTrade(t.pnl))
+  const losers = closed.filter((t) => isLosingTrade(t.pnl))
   const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
   const grossProfit = winners.reduce((sum, t) => sum + t.pnl, 0)
   const grossLoss = Math.abs(losers.reduce((sum, t) => sum + t.pnl, 0))
 
-  const winRate = (winners.length / closed.length) * 100
+  const decisive = winners.length + losers.length
+  const winRate = decisive ? (winners.length / decisive) * 100 : 0
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0
   const avgWin = winners.length ? grossProfit / winners.length : 0
   const avgLoss = losers.length ? grossLoss / losers.length : 0
@@ -386,7 +411,7 @@ export function computeDailyEquityFromNav(
   const result = new Map<string, { pnlPercent: number; equityStart: number; equityEnd: number }>()
 
   for (const day of dailyPnl) {
-    if (day.pnl === 0) continue
+    if (isBreakevenTrade(day.pnl)) continue
     const equityStart = equityBeforeTradingDay(day.date, day.pnl, sortedNav)
     if (equityStart <= 0) continue
     result.set(day.date, {
@@ -417,47 +442,57 @@ export function computeDailyEquity(
 }
 
 export function computeSymbolStats(trades: Trade[]): SymbolStats[] {
-  const map = new Map<string, { pnl: number; wins: number; total: number }>()
+  const map = new Map<string, { pnl: number; wins: number; losses: number; total: number }>()
 
   for (const trade of trades.filter((t) => t.status === 'closed')) {
-    const existing = map.get(trade.symbol) ?? { pnl: 0, wins: 0, total: 0 }
+    const existing = map.get(trade.symbol) ?? { pnl: 0, wins: 0, losses: 0, total: 0 }
+    const outcome = classifyTradeOutcome(trade.pnl)
     map.set(trade.symbol, {
       pnl: existing.pnl + trade.pnl,
-      wins: existing.wins + (trade.pnl > 0 ? 1 : 0),
+      wins: existing.wins + (outcome === 'win' ? 1 : 0),
+      losses: existing.losses + (outcome === 'loss' ? 1 : 0),
       total: existing.total + 1,
     })
   }
 
   return Array.from(map.entries())
-    .map(([symbol, data]) => ({
-      symbol,
-      pnl: data.pnl,
-      trades: data.total,
-      winRate: data.total ? (data.wins / data.total) * 100 : 0,
-    }))
+    .map(([symbol, data]) => {
+      const decisive = data.wins + data.losses
+      return {
+        symbol,
+        pnl: data.pnl,
+        trades: data.total,
+        winRate: decisive ? (data.wins / decisive) * 100 : 0,
+      }
+    })
     .sort((a, b) => b.pnl - a.pnl)
 }
 
 export function computeSetupStats(trades: Trade[]): SetupStats[] {
-  const map = new Map<string, { pnl: number; wins: number; total: number }>()
+  const map = new Map<string, { pnl: number; wins: number; losses: number; total: number }>()
 
   for (const trade of trades.filter((t) => t.status === 'closed' && t.setup)) {
     const setup = trade.setup!
-    const existing = map.get(setup) ?? { pnl: 0, wins: 0, total: 0 }
+    const existing = map.get(setup) ?? { pnl: 0, wins: 0, losses: 0, total: 0 }
+    const outcome = classifyTradeOutcome(trade.pnl)
     map.set(setup, {
       pnl: existing.pnl + trade.pnl,
-      wins: existing.wins + (trade.pnl > 0 ? 1 : 0),
+      wins: existing.wins + (outcome === 'win' ? 1 : 0),
+      losses: existing.losses + (outcome === 'loss' ? 1 : 0),
       total: existing.total + 1,
     })
   }
 
   return Array.from(map.entries())
-    .map(([setup, data]) => ({
-      setup,
-      pnl: data.pnl,
-      trades: data.total,
-      winRate: data.total ? (data.wins / data.total) * 100 : 0,
-    }))
+    .map(([setup, data]) => {
+      const decisive = data.wins + data.losses
+      return {
+        setup,
+        pnl: data.pnl,
+        trades: data.total,
+        winRate: decisive ? (data.wins / decisive) * 100 : 0,
+      }
+    })
     .sort((a, b) => b.pnl - a.pnl)
 }
 
@@ -466,7 +501,7 @@ export function computeWinLossDistribution(trades: Trade[]): { name: string; val
   return [
     { name: '盈利', value: stats.winningTrades, color: '#22c55e' },
     { name: '亏损', value: stats.losingTrades, color: '#ef4444' },
-    { name: '持平', value: stats.breakEvenTrades, color: '#94a3b8' },
+    { name: 'BE', value: stats.breakEvenTrades, color: '#94a3b8' },
   ].filter((d) => d.value > 0)
 }
 
@@ -489,9 +524,7 @@ export function computeDayOfWeekStats(trades: Trade[]): { day: string; pnl: numb
 
 export function getDayResult(pnl: number | undefined): DayResult {
   if (pnl === undefined) return 'none'
-  if (pnl > 0) return 'win'
-  if (pnl < 0) return 'loss'
-  return 'breakeven'
+  return classifyTradeOutcome(pnl)
 }
 
 export function dayResultColor(result: DayResult): string {
@@ -555,9 +588,9 @@ export function computeCalendarStats(
   dateTo: string
 ): CalendarStats {
   const closed = filterTradesByDateRange(trades, dateFrom, dateTo)
-  const winners = closed.filter((t) => t.pnl > 0)
-  const losers = closed.filter((t) => t.pnl < 0)
-  const breakEven = closed.filter((t) => t.pnl === 0)
+  const winners = closed.filter((t) => isWinningTrade(t.pnl))
+  const losers = closed.filter((t) => isLosingTrade(t.pnl))
+  const breakEven = closed.filter((t) => isBreakevenTrade(t.pnl))
   const openTrades = trades.filter((t) => t.status === 'open').length
 
   const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
@@ -566,10 +599,12 @@ export function computeCalendarStats(
   const totalFees = closed.reduce((sum, t) => sum + t.fees, 0)
 
   const periodDaily = filterDailyPnlByRange(dailyPnl, dateFrom, dateTo)
-  const winningDays = periodDaily.filter((d) => d.pnl > 0)
-  const losingDays = periodDaily.filter((d) => d.pnl < 0)
-  const breakevenDays = periodDaily.filter((d) => d.pnl === 0)
+  const winningDays = periodDaily.filter((d) => isWinningTrade(d.pnl))
+  const losingDays = periodDaily.filter((d) => isLosingTrade(d.pnl))
+  const breakevenDays = periodDaily.filter((d) => isBreakevenTrade(d.pnl))
   const loggedDays = journal.filter((j) => j.date >= dateFrom && j.date <= dateTo).length
+
+  const decisive = winners.length + losers.length
 
   return {
     totalPnl,
@@ -577,7 +612,7 @@ export function computeCalendarStats(
     winningTrades: winners.length,
     losingTrades: losers.length,
     breakEvenTrades: breakEven.length,
-    winRate: closed.length ? (winners.length / closed.length) * 100 : 0,
+    winRate: decisive ? (winners.length / decisive) * 100 : 0,
     profitFactor: grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0,
     avgWin: winners.length ? grossProfit / winners.length : 0,
     avgLoss: losers.length ? grossLoss / losers.length : 0,
@@ -589,10 +624,10 @@ export function computeCalendarStats(
     losingDays: losingDays.length,
     breakevenDays: breakevenDays.length,
     loggedDays,
-    maxConsecutiveWins: maxConsecutive(closed, (t) => t.pnl > 0),
-    maxConsecutiveLosses: maxConsecutive(closed, (t) => t.pnl < 0),
-    maxConsecutiveWinningDays: maxConsecutive(periodDaily, (d) => d.pnl > 0),
-    maxConsecutiveLosingDays: maxConsecutive(periodDaily, (d) => d.pnl < 0),
+    maxConsecutiveWins: maxConsecutive(closed, (t) => isWinningTrade(t.pnl)),
+    maxConsecutiveLosses: maxConsecutive(closed, (t) => isLosingTrade(t.pnl)),
+    maxConsecutiveWinningDays: maxConsecutive(periodDaily, (d) => isWinningTrade(d.pnl)),
+    maxConsecutiveLosingDays: maxConsecutive(periodDaily, (d) => isLosingTrade(d.pnl)),
     avgDailyPnl: periodDaily.length ? totalPnl / periodDaily.length : 0,
     avgWinningDayPnl: winningDays.length ? winningDays.reduce((s, d) => s + d.pnl, 0) / winningDays.length : 0,
     avgLosingDayPnl: losingDays.length ? losingDays.reduce((s, d) => s + d.pnl, 0) / losingDays.length : 0,

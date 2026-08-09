@@ -10,6 +10,7 @@ import {
   LogOut,
   RefreshCw,
   BookMarked,
+  FlaskConical,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { StorageInfo } from './StorageInfo'
@@ -25,6 +26,7 @@ const navItems = [
   { to: '/journal', label: 'Daily Journal', icon: BookOpen },
   { to: '/add-trade', label: 'Add Trade', icon: PlusCircle },
   { to: '/import', label: 'Import CSV', icon: Upload },
+  { to: '/backtest', label: 'Backtesting', icon: FlaskConical },
   { to: '/ibkr-sync', label: 'IBKR Sync', icon: RefreshCw },
 ]
 

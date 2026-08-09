@@ -5,6 +5,7 @@ import type { Trade } from '../types'
 import { ChartLinkFields } from './ChartLinkFields'
 import { normalizeChartLinks } from '../utils/chartLinks'
 import { formatCurrency } from '../utils/stats'
+import { isBreakevenTrade, isLosingTrade } from '../utils/stats'
 import { cn } from '../utils/cn'
 
 type TradeEntryChartModalProps = {
@@ -63,14 +64,14 @@ export function TradeEntryChartModal({
             <BookOpen className="h-3.5 w-3.5" />
             查看当日日记
           </Link>
-          {onAddToPlaybook && trade.status === 'closed' && (
+          {onAddToPlaybook && trade.status === 'closed' && !isBreakevenTrade(trade.pnl) && (
             <button
               type="button"
               onClick={onAddToPlaybook}
               disabled={inPlaybook}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:opacity-50',
-                trade.pnl < 0
+                isLosingTrade(trade.pnl)
                   ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
                   : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
               )}
@@ -78,11 +79,9 @@ export function TradeEntryChartModal({
               <Sparkles className="h-3.5 w-3.5" />
               {inPlaybook
                 ? '已在图鉴中'
-                : trade.pnl < 0
+                : isLosingTrade(trade.pnl)
                   ? '加入亏损复盘'
-                  : trade.pnl > 0
-                    ? '加入盈利图鉴'
-                    : '加入交易图鉴'}
+                  : '加入盈利图鉴'}
             </button>
           )}
         </div>

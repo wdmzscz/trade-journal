@@ -66,7 +66,7 @@ export function DashboardPage() {
           title="胜率"
           value={formatPercent(stats.winRate)}
           trend={stats.winRate >= 50 ? 'up' : 'down'}
-          subtitle={`${stats.winningTrades}W / ${stats.losingTrades}L`}
+          subtitle={`${stats.winningTrades}W / ${stats.breakEvenTrades}BE / ${stats.losingTrades}L`}
           icon={<Target className="h-5 w-5" />}
         />
         <StatCard

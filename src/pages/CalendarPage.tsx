@@ -145,7 +145,7 @@ export function CalendarPage() {
   const evaluationData = [
     { name: '盈利', value: monthStats.winningTrades, color: '#22c55e' },
     { name: '亏损', value: monthStats.losingTrades, color: '#ef4444' },
-    { name: '持平', value: monthStats.breakEvenTrades, color: '#94a3b8' },
+    { name: 'BE', value: monthStats.breakEvenTrades, color: '#94a3b8' },
   ].filter((d) => d.value > 0)
 
   const selectMonth = (monthIndex: number) => {
@@ -194,13 +194,13 @@ export function CalendarPage() {
           title="盈利天数"
           value={String(yearStats.winningDays)}
           trend="up"
-          subtitle={`亏损 ${yearStats.losingDays} 天 · 持平 ${yearStats.breakevenDays} 天`}
+          subtitle={`亏损 ${yearStats.losingDays} 天 · BE ${yearStats.breakevenDays} 天`}
         />
         <StatCard
           title="年度胜率"
           value={formatPercent(yearStats.winRate)}
           trend={yearStats.winRate >= 50 ? 'up' : 'down'}
-          subtitle={`${yearStats.winningTrades}W / ${yearStats.losingTrades}L`}
+          subtitle={`${yearStats.winningTrades}W / ${yearStats.breakEvenTrades}BE / ${yearStats.losingTrades}L`}
         />
         <StatCard
           title="日记记录"
@@ -331,7 +331,7 @@ export function CalendarPage() {
               <span className="h-3 w-3 rounded bg-red-500" /> 亏损日
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded bg-slate-400" /> 持平日
+              <span className="h-3 w-3 rounded bg-slate-400" /> BE 日
             </span>
             <span className="flex items-center gap-1.5">
               <StickyNote className="h-3 w-3 text-brand-500" /> 有日记
@@ -492,8 +492,8 @@ export function CalendarPage() {
             <div className="space-y-3">
               <EvalRow label="胜率" value={formatPercent(monthStats.winRate)} />
               <EvalRow label="盈利交易" value={String(monthStats.winningTrades)} positive />
+              <EvalRow label="BE 交易" value={String(monthStats.breakEvenTrades)} />
               <EvalRow label="亏损交易" value={String(monthStats.losingTrades)} negative />
-              <EvalRow label="持平交易" value={String(monthStats.breakEvenTrades)} />
               <EvalRow label="盈亏比" value={monthStats.profitFactor >= 999 ? '∞' : monthStats.profitFactor.toFixed(2)} />
               <EvalRow label="期望值" value={formatCurrency(monthStats.expectancy)} />
             </div>
@@ -510,8 +510,8 @@ export function CalendarPage() {
           <StatRow label="总盈亏 (Total P&L)" value={formatCurrency(monthStats.totalPnl)} />
           <StatRow label="总交易数" value={String(monthStats.totalTrades)} />
           <StatRow label="盈利交易数" value={String(monthStats.winningTrades)} />
+          <StatRow label="BE 交易数" value={String(monthStats.breakEvenTrades)} />
           <StatRow label="亏损交易数" value={String(monthStats.losingTrades)} />
-          <StatRow label="持平交易数" value={String(monthStats.breakEvenTrades)} />
           <StatRow label="平均盈利交易" value={formatCurrency(monthStats.avgWin)} />
           <StatRow label="平均亏损交易" value={formatCurrency(-monthStats.avgLoss)} />
           <StatRow label="平均交易盈亏" value={formatCurrency(monthStats.avgTradePnl)} />
@@ -524,7 +524,7 @@ export function CalendarPage() {
           <StatRow label="总交易日" value={String(monthStats.totalTradingDays)} />
           <StatRow label="盈利天数" value={String(monthStats.winningDays)} />
           <StatRow label="亏损天数" value={String(monthStats.losingDays)} />
-          <StatRow label="持平天数" value={String(monthStats.breakevenDays)} />
+          <StatRow label="BE 天数" value={String(monthStats.breakevenDays)} />
           <StatRow label="日记记录天数" value={String(monthStats.loggedDays)} />
           <StatRow label="最大连续盈利" value={String(monthStats.maxConsecutiveWins)} />
           <StatRow label="最大连续亏损" value={String(monthStats.maxConsecutiveLosses)} />
