@@ -309,13 +309,11 @@ export function PlaybookPage() {
 
     if (isPaper && !editing.tradeId) {
       if (form.pnl === '' || Number.isNaN(Number(form.pnl))) {
-        errors.push('Paper 账户请填写盈亏金额 ($)')
+        errors.push('模拟账户请填写盈亏金额 ($)，保存后会计入交易统计')
       } else {
         paperPnl = Number(form.pnl)
       }
-      if (form.rMultiple === '' || Number.isNaN(Number(form.rMultiple))) {
-        errors.push('Paper 账户请填写盈亏 R')
-      } else {
+      if (form.rMultiple.trim() && !Number.isNaN(Number(form.rMultiple))) {
         paperR = Number(form.rMultiple)
       }
       if (form.maxRr.trim() && !Number.isNaN(Number(form.maxRr))) {
@@ -326,7 +324,7 @@ export function PlaybookPage() {
       }
     } else if (isPaper && editing.tradeId) {
       if (form.pnl !== '' && !Number.isNaN(Number(form.pnl))) paperPnl = Number(form.pnl)
-      if (form.rMultiple !== '' && !Number.isNaN(Number(form.rMultiple))) paperR = Number(form.rMultiple)
+      if (form.rMultiple.trim() && !Number.isNaN(Number(form.rMultiple))) paperR = Number(form.rMultiple)
       if (form.maxRr.trim() && !Number.isNaN(Number(form.maxRr))) paperMaxRr = Number(form.maxRr)
       if (form.stopLoss.trim() && !Number.isNaN(Number(form.stopLoss))) paperStopLoss = Number(form.stopLoss)
     }
@@ -706,8 +704,11 @@ export function PlaybookPage() {
 
               {editingIsPaper && (
                 <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-4 dark:border-violet-800 dark:bg-violet-950/30">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-                    Paper 交易记录 · 会同步进统计 / 图表 / 日历
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+                    模拟交易记录
+                  </p>
+                  <p className="mb-3 text-xs text-violet-700/90 dark:text-violet-300/80">
+                    填写盈亏后保存，会自动生成一笔交易并进入 Dashboard / 日历 / 图表统计。
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="盈亏金额 $" required>
@@ -720,7 +721,7 @@ export function PlaybookPage() {
                         className="form-input"
                       />
                     </Field>
-                    <Field label="盈亏 R" required>
+                    <Field label="盈亏 R（可选）">
                       <input
                         type="number"
                         step="0.01"
@@ -740,7 +741,7 @@ export function PlaybookPage() {
                         className="form-input"
                       />
                     </Field>
-                    <Field label="Stop Loss ($)">
+                    <Field label="止损金额 ($)">
                       <input
                         type="number"
                         step="0.01"
@@ -750,7 +751,7 @@ export function PlaybookPage() {
                         className="form-input"
                       />
                     </Field>
-                    <Field label="账户总金额设定" hint="写入该 Paper 账户本金">
+                    <Field label="账户总金额设定" hint="写入该模拟账户本金">
                       <input
                         type="number"
                         step="0.01"
