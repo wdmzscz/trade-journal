@@ -10,10 +10,11 @@
     <script>
       try {
         var pref = localStorage.getItem('trade-journal-theme-v2')
+        var hour = new Date().getHours()
+        var timeDark = hour < 7 || hour >= 19
         var dark =
           pref === 'dark' ||
-          ((pref === 'system' || pref == null) &&
-            window.matchMedia('(prefers-color-scheme: dark)').matches)
+          ((pref === 'system' || pref == null) && timeDark)
         if (dark) {
           document.documentElement.classList.add('dark')
           document.documentElement.style.colorScheme = 'dark'

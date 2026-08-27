@@ -1,4 +1,4 @@
-import { Monitor, Moon, Sun } from 'lucide-react'
+import { Clock, Moon, Sun } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme'
 import { cn } from '../utils/cn'
 
@@ -9,7 +9,7 @@ type ThemeToggleProps = {
 }
 
 const LABELS = {
-  system: '跟随系统',
+  system: '跟随时间',
   light: '日间模式',
   dark: '夜间模式',
 } as const
@@ -19,10 +19,10 @@ export function ThemeToggle({ className, variant = 'default' }: ThemeToggleProps
 
   const title =
     preference === 'system'
-      ? `跟随系统（当前${resolvedTheme === 'dark' ? '夜间' : '日间'}）· 点击切换`
+      ? `跟随时间（7:00–19:00 日间，其余夜间 · 当前${resolvedTheme === 'dark' ? '夜间' : '日间'}）· 点击切换`
       : `${LABELS[preference]} · 点击切换`
 
-  const Icon = preference === 'system' ? Monitor : preference === 'dark' ? Moon : Sun
+  const Icon = preference === 'system' ? Clock : preference === 'dark' ? Moon : Sun
 
   return (
     <button
