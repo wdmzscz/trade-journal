@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import { Menu, X, TrendingUp } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { AccountTabs } from './AccountTabs'
+import { PaperAccountConfigPanel } from './PaperAccountConfigPanel'
 import { MobileNav } from './MobileNav'
 import { ThemeToggle } from './ThemeToggle'
 import { useTradeStore } from '../hooks/useTradeStore'
@@ -63,7 +64,8 @@ export function Layout() {
 
         <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-3 py-4 sm:px-5 sm:py-5 lg:px-8 lg:py-8 pb-nav-safe">
           <AccountTabs />
-          <div className="flex-1 pt-4 sm:pt-6">
+          <div className="flex flex-1 flex-col gap-4 pt-4 sm:gap-5 sm:pt-6">
+            <PaperAccountConfigPanel />
             <Outlet key={selectedAccount} />
           </div>
         </div>

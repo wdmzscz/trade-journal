@@ -18,7 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   Plus, X, LayoutGrid, TrendingUp, LineChart, Wallet, Upload,
-  Pencil, Trash2, Settings2,
+  Pencil, Trash2, Settings2, FlaskConical,
 } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { cn } from '../utils/cn'
@@ -49,18 +49,23 @@ export function AccountTabs() {
   const [formId, setFormId] = useState('')
   const [formLabel, setFormLabel] = useState('')
   const [formType, setFormType] = useState<AccountType>('futures')
+  const [formIsPaper, setFormIsPaper] = useState(false)
   const [formStartingCapital, setFormStartingCapital] = useState('')
   const [formCurrentCapital, setFormCurrentCapital] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const allPnl = accountInfos.reduce((sum, a) => sum + a.totalPnl, 0)
-  const allTrades = accountInfos.reduce((sum, a) => sum + a.tradeCount, 0)
+  const liveAccounts = accountInfos.filter((a) => !a.isPaper)
+  const allPnl = liveAccounts.reduce((sum, a) => sum + a.totalPnl, 0)
+  const allTrades = liveAccounts.reduce((sum, a) => sum + a.tradeCount, 0)
 
   const openAdd = () => {
     setEditingAccount(null)
     setFormId('')
     setFormLabel('')
     setFormType('futures')
+    setFormIsPaper(false)
+    setFormStartingCapital('')
+    setFormCurrentCapital('')
     setConfirmDelete(false)
     setModal('add')
   }
@@ -70,6 +75,7 @@ export function AccountTabs() {
     setFormId(account.id)
     setFormLabel(account.label)
     setFormType(account.type)
+    setFormIsPaper(Boolean(account.isPaper))
     setFormStartingCapital(
       account.totalDeposits != null
         ? String(account.totalDeposits)
@@ -100,20 +106,36 @@ export function AccountTabs() {
 
   const handleAdd = () => {
     if (!formId.trim()) return
-    registerAccount(formId.trim(), formLabel.trim() || formId.trim(), formType)
+    registerAccount(formId.trim(), formLabel.trim() || formId.trim(), formType, { isPaper: formIsPaper })
     closeModal()
   }
 
   const handleSaveEdit = () => {
     if (!editingAccount) return
-    const deposits = formStartingCapital.trim() ? Number(formStartingCapital) : undefined
-    const current = formCurrentCapital.trim() ? Number(formCurrentCapital) : undefined
-    updateAccount(editingAccount.id, {
-      label: formLabel,
-      type: formType,
-      totalDeposits: deposits,
-      currentCapital: current,
-    })
+    if (formIsPaper) {
+      const balance = formStartingCapital.trim() ? Number(formStartingCapital) : undefined
+      const current = formCurrentCapital.trim()
+        ? Number(formCurrentCapital)
+        : balance
+      updateAccount(editingAccount.id, {
+        label: formLabel,
+        type: formType,
+        isPaper: true,
+        startingCapital: balance,
+        totalDeposits: balance,
+        currentCapital: current,
+      })
+    } else {
+      const deposits = formStartingCapital.trim() ? Number(formStartingCapital) : undefined
+      const current = formCurrentCapital.trim() ? Number(formCurrentCapital) : undefined
+      updateAccount(editingAccount.id, {
+        label: formLabel,
+        type: formType,
+        isPaper: false,
+        totalDeposits: deposits,
+        currentCapital: current,
+      })
+    }
     closeModal()
   }
 
@@ -159,6 +181,9 @@ export function AccountTabs() {
             <SortableContext items={accountIds} strategy={horizontalListSortingStrategy}>
               {accountInfos.map((account) => {
                 const meta = TYPE_META[account.type]
+                const Icon = account.isPaper ? FlaskConical : meta.icon
+                const badge = account.isPaper ? 'Paper' : meta.badge
+                const badgeColor = account.isPaper ? 'text-violet-600 dark:text-violet-400' : meta.color
                 return (
                   <SortableTabButton
                     key={account.id}
@@ -167,11 +192,11 @@ export function AccountTabs() {
                     active={selectedAccount === account.id}
                     onClick={() => setSelectedAccount(account.id)}
                     onEdit={(e) => openEdit(account, e)}
-                    icon={meta.icon}
+                    icon={Icon}
                     title={account.label}
                     subtitle={account.id !== account.label ? account.id : `${account.tradeCount} 笔`}
-                    badge={meta.badge}
-                    badgeColor={meta.color}
+                    badge={badge}
+                    badgeColor={badgeColor}
                     trailing={
                       account.tradeCount > 0 ? (
                         <span className={cn('text-[10px] font-semibold', (computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400')}>
@@ -228,6 +253,7 @@ export function AccountTabs() {
               <input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="期货账户" className="form-input" />
             </Field>
             <TypePicker value={formType} onChange={setFormType} />
+            <PaperToggle value={formIsPaper} onChange={setFormIsPaper} />
           </div>
           <ModalActions
             primaryLabel="添加"
@@ -235,7 +261,7 @@ export function AccountTabs() {
             primaryDisabled={!formId.trim()}
             onCancel={closeModal}
           />
-          <ImportHint onClose={closeModal} />
+          <ImportHint onClose={closeModal} isPaper={formIsPaper} />
         </AccountModal>
       )}
 
@@ -250,31 +276,65 @@ export function AccountTabs() {
               <input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="期货账户" className="form-input" autoFocus />
             </Field>
             <TypePicker value={formType} onChange={setFormType} />
-            <Field label="累计入金" hint="来自 IBKR 存款记录；同步后自动填写，如 10000">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={formStartingCapital}
-                onChange={(e) => setFormStartingCapital(e.target.value)}
-                placeholder="10000"
-                className="form-input"
-              />
-            </Field>
-            <Field label="当前净资产" hint="与 IBKR 账户总资产一致，如 10617">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={formCurrentCapital}
-                onChange={(e) => setFormCurrentCapital(e.target.value)}
-                placeholder="10617"
-                className="form-input"
-              />
-            </Field>
+            <PaperToggle value={formIsPaper} onChange={setFormIsPaper} />
+            {formIsPaper ? (
+              <>
+                <Field label="Paper 账户金额" hint="模拟账户总资金，用于日历 / 收益曲线本金">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formStartingCapital}
+                    onChange={(e) => {
+                      setFormStartingCapital(e.target.value)
+                      if (!formCurrentCapital.trim()) setFormCurrentCapital(e.target.value)
+                    }}
+                    placeholder="50000"
+                    className="form-input"
+                  />
+                </Field>
+                <Field label="当前净资产（可选）" hint="不填则与账户金额相同">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formCurrentCapital}
+                    onChange={(e) => setFormCurrentCapital(e.target.value)}
+                    placeholder="50000"
+                    className="form-input"
+                  />
+                </Field>
+              </>
+            ) : (
+              <>
+                <Field label="累计入金" hint="来自 IBKR 存款记录；同步后自动填写，如 10000">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formStartingCapital}
+                    onChange={(e) => setFormStartingCapital(e.target.value)}
+                    placeholder="10000"
+                    className="form-input"
+                  />
+                </Field>
+                <Field label="当前净资产" hint="与 IBKR 账户总资产一致，如 10617">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formCurrentCapital}
+                    onChange={(e) => setFormCurrentCapital(e.target.value)}
+                    placeholder="10617"
+                    className="form-input"
+                  />
+                </Field>
+              </>
+            )}
 
             <div className="rounded-lg bg-slate-50 dark:bg-surface-800 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
               {editingAccount.tradeCount} 笔交易 · {editingJournalCount} 条日记
+              {formIsPaper && ' · Paper 账户不计入「全部账户」汇总'}
             </div>
           </div>
 
@@ -315,23 +375,49 @@ export function AccountTabs() {
           <div className="space-y-2">
             {accountInfos.map((account) => {
               const meta = TYPE_META[account.type]
-              const Icon = meta.icon
+              const Icon = account.isPaper ? FlaskConical : meta.icon
               const journalCount = journal.filter((j) => j.account === account.id).length
               return (
                 <div
                   key={account.id}
                   className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-surface-700 p-3 hover:bg-slate-50 dark:hover:bg-surface-800 dark:bg-surface-800"
                 >
-                  <div className={cn('rounded-lg bg-slate-100 dark:bg-surface-800 p-2', meta.color)}>
+                  <div className={cn('rounded-lg bg-slate-100 dark:bg-surface-800 p-2', account.isPaper ? 'text-violet-600 dark:text-violet-400' : meta.color)}>
                     <Icon className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{account.label}</p>
                     <p className="truncate text-xs text-slate-400">
-                      {account.id} · {meta.badge} · {account.tradeCount} 笔交易 · {journalCount} 条日记
+                      {account.id} · {account.isPaper ? 'Paper' : meta.badge} · {account.tradeCount} 笔交易 · {journalCount} 条日记
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateAccount(account.id, {
+                          isPaper: !account.isPaper,
+                          ...( !account.isPaper
+                            ? {
+                                startingCapital: account.startingCapital ?? account.totalDeposits ?? 50000,
+                                totalDeposits: account.totalDeposits ?? account.startingCapital ?? 50000,
+                                currentCapital:
+                                  account.currentCapital ??
+                                  (account.startingCapital ?? account.totalDeposits ?? 50000) + account.totalPnl,
+                              }
+                            : {}),
+                        })
+                      }}
+                      className={cn(
+                        'rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors',
+                        account.isPaper
+                          ? 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:hover:bg-violet-900'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-800 dark:text-slate-300 dark:hover:bg-surface-700'
+                      )}
+                      title={account.isPaper ? '取消 Paper，改回实盘' : '设为 Paper 模拟账户'}
+                    >
+                      {account.isPaper ? '取消 Paper' : '设为 Paper'}
+                    </button>
                     <button
                       onClick={() => openEditAccount(account)}
                       className="rounded-lg p-2 text-slate-400 hover:bg-white dark:hover:bg-surface-800 dark:bg-surface-900 hover:text-brand-600 dark:text-brand-400"
@@ -560,7 +646,58 @@ function ModalActions({
   )
 }
 
-function ImportHint({ onClose }: { onClose: () => void }) {
+function PaperToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <Field
+      label="账户模式"
+      hint="模拟账户：简化记账（盈亏 $ / R），接入现有统计与日历；不并入「全部账户」实盘汇总。已有账户也可随时切换。"
+    >
+      <div
+        role="group"
+        aria-label="账户模式"
+        className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-surface-700 dark:bg-surface-800/80"
+      >
+        <button
+          type="button"
+          onClick={() => onChange(false)}
+          className={cn(
+            'flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+            !value
+              ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200 dark:bg-surface-900 dark:text-slate-100 dark:ring-surface-600'
+              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+          )}
+        >
+          <Wallet className="h-4 w-4 shrink-0" />
+          实盘账户
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(true)}
+          className={cn(
+            'flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+            value
+              ? 'bg-violet-600 text-white shadow-sm dark:bg-violet-600'
+              : 'text-slate-500 hover:text-violet-700 dark:text-slate-400 dark:hover:text-violet-300'
+          )}
+        >
+          <FlaskConical className="h-4 w-4 shrink-0" />
+          Paper 模拟
+        </button>
+      </div>
+    </Field>
+  )
+}
+
+function ImportHint({ onClose, isPaper }: { onClose: () => void; isPaper?: boolean }) {
+  if (isPaper) {
+    return (
+      <div className="mt-4 rounded-lg bg-violet-50 p-3 dark:bg-violet-950/30">
+        <p className="text-xs text-violet-800 dark:text-violet-200">
+          Paper 账户可直接在「Add Trade」或「Playbook 新建案例」里填写盈亏 $、R、Max R、Stop Loss，记录会进入该账户的统计、图表与日历。
+        </p>
+      </div>
+    )
+  }
   return (
     <div className="mt-4 rounded-lg bg-slate-50 dark:bg-surface-800 p-3">
       <p className="text-xs text-slate-500 dark:text-slate-400">

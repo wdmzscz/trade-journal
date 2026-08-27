@@ -28,6 +28,11 @@ const EMPTY_FORM = {
   setup: '',
   tags: '',
   outcome: 'win' as PlaybookOutcome,
+  pnl: '',
+  rMultiple: '',
+  maxRr: '',
+  stopLoss: '',
+  accountBalance: '',
 }
 
 type DateSort = 'newest' | 'oldest'
@@ -72,9 +77,14 @@ export function PlaybookPage() {
     filteredPlaybook,
     filteredTrades,
     selectedAccount,
+    accountProfiles,
+    accountInfos,
     savePlaybookEntry,
     deletePlaybookEntry,
     togglePlaybookPinned,
+    addTrade,
+    updateTrade,
+    updateAccount,
   } = useTradeStore()
 
   const [search, setSearch] = useState('')
@@ -86,6 +96,11 @@ export function PlaybookPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [charts, setCharts] = useState(mergePlaybookChartSlots())
+
+  const editingAccountId = editing?.account?.trim() || (selectedAccount !== 'all' ? selectedAccount : '')
+  const editingIsPaper = Boolean(
+    editingAccountId && accountProfiles.find((p) => p.id === editingAccountId)?.isPaper
+  )
 
   const closedCandidates = useMemo(
     () => filteredTrades
@@ -160,11 +175,15 @@ export function PlaybookPage() {
   const openNew = () => {
     setSaveError(null)
     const today = todayLocalDate()
+    const account = selectedAccount !== 'all' ? selectedAccount : ''
+    const profile = account ? accountProfiles.find((p) => p.id === account) : undefined
+    const balance =
+      profile?.startingCapital ?? profile?.totalDeposits ?? profile?.currentCapital
     setEditing({
       id: '',
       symbol: '',
       side: 'long',
-      account: selectedAccount !== 'all' ? selectedAccount : '',
+      account,
       entryDate: `${today}T12:00:00.000Z`,
       entryPrice: 0,
       outcome: 'win',
@@ -175,7 +194,12 @@ export function PlaybookPage() {
       createdAt: '',
       updatedAt: '',
     })
-    setForm({ ...EMPTY_FORM, entryDate: today, outcome: 'win' })
+    setForm({
+      ...EMPTY_FORM,
+      entryDate: today,
+      outcome: 'win',
+      accountBalance: balance != null ? String(balance) : '',
+    })
     setCharts(mergePlaybookChartSlots())
   }
 
@@ -184,6 +208,9 @@ export function PlaybookPage() {
     const linkedTrade = entry.tradeId ? filteredTrades.find((t) => t.id === entry.tradeId) : undefined
     const account = entry.account.trim() || linkedTrade?.account || (selectedAccount !== 'all' ? selectedAccount : '')
     const outcome = resolvePlaybookOutcome(entry) ?? 'win'
+    const profile = account ? accountProfiles.find((p) => p.id === account) : undefined
+    const balance =
+      profile?.startingCapital ?? profile?.totalDeposits ?? profile?.currentCapital
     setEditing({ ...entry, account, outcome })
     setForm({
       title: entry.title,
@@ -194,6 +221,11 @@ export function PlaybookPage() {
       setup: entry.setup ?? '',
       tags: entry.tags.join(', '),
       outcome,
+      pnl: entry.pnl != null ? String(entry.pnl) : linkedTrade?.pnl != null ? String(linkedTrade.pnl) : '',
+      rMultiple: linkedTrade?.rMultiple != null ? String(linkedTrade.rMultiple) : '',
+      maxRr: linkedTrade?.maxRr != null ? String(linkedTrade.maxRr) : '',
+      stopLoss: linkedTrade?.stopLoss != null ? String(linkedTrade.stopLoss) : '',
+      accountBalance: balance != null ? String(balance) : '',
     })
     setCharts(mergePlaybookChartSlots(entry.charts))
   }
@@ -269,23 +301,113 @@ export function PlaybookPage() {
       errors.push('请先在顶部标签栏选择一个具体账户（不要选「全部账户」），或使用「从交易添加」')
     }
 
+    const isPaper = Boolean(account && accountProfiles.find((p) => p.id === account)?.isPaper)
+    let paperPnl: number | undefined
+    let paperR: number | undefined
+    let paperMaxRr: number | undefined
+    let paperStopLoss: number | undefined
+
+    if (isPaper && !editing.tradeId) {
+      if (form.pnl === '' || Number.isNaN(Number(form.pnl))) {
+        errors.push('Paper 账户请填写盈亏金额 ($)')
+      } else {
+        paperPnl = Number(form.pnl)
+      }
+      if (form.rMultiple === '' || Number.isNaN(Number(form.rMultiple))) {
+        errors.push('Paper 账户请填写盈亏 R')
+      } else {
+        paperR = Number(form.rMultiple)
+      }
+      if (form.maxRr.trim() && !Number.isNaN(Number(form.maxRr))) {
+        paperMaxRr = Number(form.maxRr)
+      }
+      if (form.stopLoss.trim() && !Number.isNaN(Number(form.stopLoss))) {
+        paperStopLoss = Number(form.stopLoss)
+      }
+    } else if (isPaper && editing.tradeId) {
+      if (form.pnl !== '' && !Number.isNaN(Number(form.pnl))) paperPnl = Number(form.pnl)
+      if (form.rMultiple !== '' && !Number.isNaN(Number(form.rMultiple))) paperR = Number(form.rMultiple)
+      if (form.maxRr.trim() && !Number.isNaN(Number(form.maxRr))) paperMaxRr = Number(form.maxRr)
+      if (form.stopLoss.trim() && !Number.isNaN(Number(form.stopLoss))) paperStopLoss = Number(form.stopLoss)
+    }
+
     if (errors.length > 0) {
       setSaveError(errors.join(' · '))
       return
     }
 
     setSaveError(null)
+
+    let tradeId = editing.tradeId
+    const entryIso = `${entryDate}T12:00:00.000Z`
+    const resolvedPnl =
+      paperPnl ??
+      editing.pnl ??
+      (form.outcome === 'win' ? 1 : form.outcome === 'loss' ? -1 : 0)
+
+    if (isPaper && account) {
+      if (!tradeId) {
+        tradeId = addTrade({
+          symbol,
+          side: editing.side,
+          status: 'closed',
+          entryDate: entryIso,
+          exitDate: entryIso,
+          entryPrice: 0,
+          exitPrice: 0,
+          quantity: 1,
+          fees: 0,
+          pnl: paperPnl!,
+          rMultiple: paperR,
+          maxRr: paperMaxRr,
+          stopLoss: paperStopLoss,
+          setup: form.setup.trim() || undefined,
+          tags: form.tags.split(/[,;]/).map((t) => t.trim()).filter(Boolean),
+          notes: form.thesis.trim() || undefined,
+          account,
+        })
+      } else if (paperPnl != null || paperR != null || paperMaxRr != null || paperStopLoss != null) {
+        updateTrade(tradeId, {
+          symbol,
+          entryDate: entryIso,
+          exitDate: entryIso,
+          ...(paperPnl != null ? { pnl: paperPnl } : {}),
+          ...(paperR != null ? { rMultiple: paperR } : {}),
+          ...(paperMaxRr != null ? { maxRr: paperMaxRr } : {}),
+          ...(paperStopLoss != null ? { stopLoss: paperStopLoss } : {}),
+          setup: form.setup.trim() || undefined,
+        })
+      }
+
+      const balance = form.accountBalance.trim() ? Number(form.accountBalance) : undefined
+      if (balance != null && !Number.isNaN(balance) && balance > 0) {
+        const priorPnl = accountInfos.find((a) => a.id === account)?.totalPnl ?? 0
+        const delta =
+          paperPnl != null && !editing.tradeId
+            ? paperPnl
+            : paperPnl != null && linkedTrade
+              ? paperPnl - linkedTrade.pnl
+              : 0
+        updateAccount(account, {
+          isPaper: true,
+          startingCapital: balance,
+          totalDeposits: balance,
+          currentCapital: balance + priorPnl + delta,
+        })
+      }
+    }
+
     savePlaybookEntry({
       id: editing.id || undefined,
-      tradeId: editing.tradeId,
+      tradeId,
       symbol,
       side: editing.side,
       account,
-      entryDate: `${entryDate}T12:00:00.000Z`,
-      exitDate: editing.exitDate,
+      entryDate: entryIso,
+      exitDate: editing.exitDate ?? (isPaper ? entryIso : undefined),
       entryPrice: editing.entryPrice,
       exitPrice: editing.exitPrice,
-      pnl: editing.pnl,
+      pnl: isPaper ? (paperPnl ?? editing.pnl ?? resolvedPnl) : editing.pnl,
       outcome: form.outcome,
       title: form.title.trim() || symbol,
       thesis: form.thesis.trim() || undefined,
@@ -581,6 +703,67 @@ export function PlaybookPage() {
                   />
                 </Field>
               </div>
+
+              {editingIsPaper && (
+                <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-4 dark:border-violet-800 dark:bg-violet-950/30">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+                    Paper 交易记录 · 会同步进统计 / 图表 / 日历
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="盈亏金额 $" required>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={form.pnl}
+                        onChange={(e) => setForm((f) => ({ ...f, pnl: e.target.value }))}
+                        placeholder="250 或 -120"
+                        className="form-input"
+                      />
+                    </Field>
+                    <Field label="盈亏 R" required>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={form.rMultiple}
+                        onChange={(e) => setForm((f) => ({ ...f, rMultiple: e.target.value }))}
+                        placeholder="2.0 或 -1"
+                        className="form-input"
+                      />
+                    </Field>
+                    <Field label="最高收益 Max R">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={form.maxRr}
+                        onChange={(e) => setForm((f) => ({ ...f, maxRr: e.target.value }))}
+                        placeholder="2.8"
+                        className="form-input"
+                      />
+                    </Field>
+                    <Field label="Stop Loss ($)">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={form.stopLoss}
+                        onChange={(e) => setForm((f) => ({ ...f, stopLoss: e.target.value }))}
+                        placeholder="500"
+                        className="form-input"
+                      />
+                    </Field>
+                    <Field label="账户总金额设定" hint="写入该 Paper 账户本金">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={form.accountBalance}
+                        onChange={(e) => setForm((f) => ({ ...f, accountBalance: e.target.value }))}
+                        placeholder="50000"
+                        className="form-input"
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
               <Field label="案例名称" hint="选填；留空时卡片标题使用交易品种">
                 <input
                   value={form.title}

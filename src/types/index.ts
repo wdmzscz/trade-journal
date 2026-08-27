@@ -16,11 +16,39 @@ export interface DailyNav {
   total: number
 }
 
+export interface PaperAccountSettings {
+  /** 每笔风险占账户 % */
+  riskPercent: number
+  /** BE 下限（R） */
+  beMinR: number
+  /** BE 上限（R） */
+  beMaxR: number
+  /** 每笔成本（R） */
+  costPerTradeR: number
+}
+
+export const DEFAULT_PAPER_SETTINGS: PaperAccountSettings = {
+  riskPercent: 1,
+  beMinR: -0.01,
+  beMaxR: 0.2,
+  costPerTradeR: 0,
+}
+
+export function resolvePaperSettings(
+  settings?: Partial<PaperAccountSettings> | null
+): PaperAccountSettings {
+  return { ...DEFAULT_PAPER_SETTINGS, ...(settings ?? {}) }
+}
+
 export interface AccountProfile {
   id: string
   label: string
   type: AccountType
   createdAt: string
+  /** Paper / 模拟账户：简化记账，不并入「全部账户」实盘汇总 */
+  isPaper?: boolean
+  /** Paper 分析参数（余额用 startingCapital / totalDeposits） */
+  paperSettings?: PaperAccountSettings
   /** 期初净值（IBKR：开始价值） */
   startingCapital?: number
   /** 当前/期末净值（IBKR：结束价值） */
@@ -37,6 +65,7 @@ export interface AccountInfo {
   id: string
   label: string
   type: AccountType
+  isPaper?: boolean
   tradeCount: number
   totalPnl: number
   startingCapital?: number
@@ -119,6 +148,10 @@ export interface Trade {
   fees: number
   pnl: number
   rMultiple?: number
+  /** Paper：本单最高曾达到的 R */
+  maxRr?: number
+  /** Paper：止损金额（$ risk / stop loss） */
+  stopLoss?: number
   setup?: string
   tags: string[]
   notes?: string

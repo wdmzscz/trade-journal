@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import type { Trade, JournalEntry, AccountProfile, AccountCashFlow, PlaybookEntry } from '../types'
+import type { Trade, JournalEntry, AccountProfile, AccountCashFlow, PlaybookEntry, PaperAccountSettings } from '../types'
+import { resolvePaperSettings } from '../types'
 import { getSupabase } from './supabase'
 
 export type CloudData = {
@@ -24,6 +25,8 @@ interface TradeRow {
   fees: number
   pnl: number
   r_multiple: number | null
+  max_rr: number | null
+  stop_loss: number | null
   setup: string | null
   tags: string[]
   notes: string | null
@@ -81,6 +84,8 @@ interface ProfileRow {
   label: string
   type: string
   created_at: string
+  is_paper: boolean | null
+  paper_settings: AccountProfile['paperSettings'] | null
   starting_capital: number | null
   current_capital: number | null
   total_deposits: number | null
@@ -104,6 +109,8 @@ function rowToTrade(row: TradeRow): Trade {
     fees: Number(row.fees),
     pnl: Number(row.pnl),
     rMultiple: row.r_multiple != null ? Number(row.r_multiple) : undefined,
+    maxRr: row.max_rr != null ? Number(row.max_rr) : undefined,
+    stopLoss: row.stop_loss != null ? Number(row.stop_loss) : undefined,
     setup: row.setup ?? undefined,
     tags: row.tags ?? [],
     notes: row.notes ?? undefined,
@@ -131,6 +138,8 @@ function tradeToRow(trade: Trade, userId: string): TradeRow {
     fees: trade.fees,
     pnl: trade.pnl,
     r_multiple: trade.rMultiple ?? null,
+    max_rr: trade.maxRr ?? null,
+    stop_loss: trade.stopLoss ?? null,
     setup: trade.setup ?? null,
     tags: trade.tags,
     notes: trade.notes ?? null,
@@ -236,6 +245,10 @@ function rowToProfile(row: ProfileRow): AccountProfile {
     label: row.label,
     type: row.type as AccountProfile['type'],
     createdAt: row.created_at,
+    isPaper: Boolean(row.is_paper),
+    paperSettings: row.paper_settings
+      ? resolvePaperSettings(row.paper_settings as Partial<PaperAccountSettings>)
+      : undefined,
     startingCapital: row.starting_capital ?? undefined,
     currentCapital: row.current_capital ?? undefined,
     totalDeposits: row.total_deposits ?? undefined,
@@ -252,6 +265,10 @@ function profileToRow(profile: AccountProfile, userId: string): ProfileRow {
     label: profile.label,
     type: profile.type,
     created_at: profile.createdAt,
+    is_paper: Boolean(profile.isPaper),
+    paper_settings: profile.isPaper
+      ? resolvePaperSettings(profile.paperSettings)
+      : (profile.paperSettings ?? null),
     starting_capital: profile.startingCapital ?? null,
     current_capital: profile.currentCapital ?? null,
     total_deposits: profile.totalDeposits ?? null,

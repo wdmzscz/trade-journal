@@ -12,6 +12,7 @@ import { StatCard } from '../components/StatCard'
 import { PnlBadge } from '../components/PnlBadge'
 import { AccountScopeBanner } from '../components/AccountScopeBanner'
 import { PerformanceScoreCard } from '../components/PerformanceScoreCard'
+import { resolvePaperSettings } from '../types'
 import {
   computeDashboardStats, computeDailyPnl, computeCumulativePnl,
   computeSymbolStats, computeSetupStats, computeWinLossDistribution,
@@ -21,7 +22,7 @@ import {
 import { cn } from '../utils/cn'
 
 export function DashboardPage() {
-  const { filteredTrades } = useTradeStore()
+  const { filteredTrades, selectedAccountInfo, accountProfiles, selectedAccount } = useTradeStore()
   const { resolvedTheme } = useTheme()
   const chartGrid = resolvedTheme === 'dark' ? '#334155' : '#e2e8f0'
   const chartTick = resolvedTheme === 'dark' ? '#94a3b8' : '#64748b'
@@ -31,13 +32,22 @@ export function DashboardPage() {
     borderRadius: 8,
   }
 
-  const stats = useMemo(() => computeDashboardStats(filteredTrades), [filteredTrades])
+  const paperSettings = useMemo(() => {
+    if (selectedAccount === 'all' || !selectedAccountInfo?.isPaper) return null
+    const profile = accountProfiles.find((p) => p.id === selectedAccount)
+    return resolvePaperSettings(profile?.paperSettings)
+  }, [selectedAccount, selectedAccountInfo, accountProfiles])
+
+  const stats = useMemo(() => computeDashboardStats(filteredTrades, paperSettings), [filteredTrades, paperSettings])
   const performanceScore = useMemo(() => computePerformanceScore(filteredTrades), [filteredTrades])
   const dailyPnl = useMemo(() => computeDailyPnl(filteredTrades), [filteredTrades])
   const cumulativePnl = useMemo(() => computeCumulativePnl(dailyPnl), [dailyPnl])
   const symbolStats = useMemo(() => computeSymbolStats(filteredTrades).slice(0, 8), [filteredTrades])
   const setupStats = useMemo(() => computeSetupStats(filteredTrades).slice(0, 6), [filteredTrades])
-  const winLoss = useMemo(() => computeWinLossDistribution(filteredTrades), [filteredTrades])
+  const winLoss = useMemo(
+    () => computeWinLossDistribution(filteredTrades, paperSettings),
+    [filteredTrades, paperSettings]
+  )
   const dayOfWeek = useMemo(() => computeDayOfWeekStats(filteredTrades), [filteredTrades])
 
   const recentTrades = useMemo(

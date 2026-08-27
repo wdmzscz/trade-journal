@@ -20,6 +20,7 @@ import type {
   CalendarStats,
   CalendarWeekRow,
   PerformanceScore,
+  PaperAccountSettings,
 } from '../types'
 import { BREAKEVEN_PNL_THRESHOLD } from '../types'
 
@@ -90,6 +91,19 @@ export function classifyTradeOutcome(pnl: number): TradeOutcome {
   return pnl > 0 ? 'win' : 'loss'
 }
 
+/** Paper：优先按 R（扣成本后）落在 BE 区间判定；否则回退 $ PnL 规则 */
+export function classifyTradeOutcomeWithOptions(
+  trade: Pick<Trade, 'pnl' | 'rMultiple'>,
+  paper?: PaperAccountSettings | null
+): TradeOutcome {
+  if (paper && trade.rMultiple != null && Number.isFinite(trade.rMultiple)) {
+    const net = trade.rMultiple - (paper.costPerTradeR || 0)
+    if (net >= paper.beMinR && net <= paper.beMaxR) return 'breakeven'
+    return net > paper.beMaxR ? 'win' : 'loss'
+  }
+  return classifyTradeOutcome(trade.pnl)
+}
+
 export function isWinningTrade(pnl: number): boolean {
   return classifyTradeOutcome(pnl) === 'win'
 }
@@ -102,11 +116,14 @@ export function isBreakevenTrade(pnl: number): boolean {
   return classifyTradeOutcome(pnl) === 'breakeven'
 }
 
-export function computeDashboardStats(trades: Trade[]): DashboardStats {
+export function computeDashboardStats(
+  trades: Trade[],
+  paper?: PaperAccountSettings | null
+): DashboardStats {
   const closed = trades.filter((t) => t.status === 'closed')
-  const winners = closed.filter((t) => isWinningTrade(t.pnl))
-  const losers = closed.filter((t) => isLosingTrade(t.pnl))
-  const breakEven = closed.filter((t) => isBreakevenTrade(t.pnl))
+  const winners = closed.filter((t) => classifyTradeOutcomeWithOptions(t, paper) === 'win')
+  const losers = closed.filter((t) => classifyTradeOutcomeWithOptions(t, paper) === 'loss')
+  const breakEven = closed.filter((t) => classifyTradeOutcomeWithOptions(t, paper) === 'breakeven')
 
   const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
   const grossProfit = winners.reduce((sum, t) => sum + t.pnl, 0)
@@ -496,8 +513,11 @@ export function computeSetupStats(trades: Trade[]): SetupStats[] {
     .sort((a, b) => b.pnl - a.pnl)
 }
 
-export function computeWinLossDistribution(trades: Trade[]): { name: string; value: number; color: string }[] {
-  const stats = computeDashboardStats(trades)
+export function computeWinLossDistribution(
+  trades: Trade[],
+  paper?: PaperAccountSettings | null
+): { name: string; value: number; color: string }[] {
+  const stats = computeDashboardStats(trades, paper)
   return [
     { name: '盈利', value: stats.winningTrades, color: '#22c55e' },
     { name: '亏损', value: stats.losingTrades, color: '#ef4444' },

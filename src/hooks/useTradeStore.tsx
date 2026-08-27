@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType, PlaybookEntry } from '../types'
+import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType, PlaybookEntry, PaperAccountSettings } from '../types'
+import { resolvePaperSettings } from '../types'
 import { playbookOutcomeFromPnl } from '../types'
 import { calculateTradePnl, resolveStartingCapital } from '../utils/stats'
 import { mergeTrades } from '../utils/storage'
@@ -188,18 +189,20 @@ interface TradeStoreContextValue {
   setSelectedAccount: (account: string) => void
   accountProfiles: AccountProfile[]
   accountInfos: AccountInfo[]
-  registerAccount: (id: string, label: string, type: AccountType) => void
+  registerAccount: (id: string, label: string, type: AccountType, options?: { isPaper?: boolean }) => void
   updateAccount: (id: string, updates: {
     label?: string
     type?: AccountType
+    isPaper?: boolean
     startingCapital?: number
     currentCapital?: number
     totalDeposits?: number
+    paperSettings?: Partial<PaperAccountSettings>
   }) => void
   deleteAccount: (id: string) => void
   reorderAccounts: (fromId: string, toId: string) => void
   setAccountsOrder: (orderedIds: string[]) => void
-  addTrade: (trade: Omit<Trade, 'id' | 'createdAt' | 'updatedAt' | 'pnl'> & { pnl?: number }) => void
+  addTrade: (trade: Omit<Trade, 'id' | 'createdAt' | 'updatedAt' | 'pnl'> & { pnl?: number }) => string
   updateTrade: (id: string, updates: Partial<Trade>) => void
   deleteTrade: (id: string) => void
   importTrades: (trades: Trade[], options?: {
@@ -370,7 +373,7 @@ export function TradeStoreProvider({
     setSelectedAccountState(account)
   }, [])
 
-  const registerAccount = useCallback((id: string, label: string, type: AccountType) => {
+  const registerAccount = useCallback((id: string, label: string, type: AccountType, options?: { isPaper?: boolean }) => {
     const trimmedId = id.trim()
     if (!trimmedId) return
     const now = new Date().toISOString()
@@ -380,10 +383,21 @@ export function TradeStoreProvider({
       const existing = prev.find((p) => p.id === trimmedId)
       let profile: AccountProfile
       if (existing) {
-        profile = { ...existing, label: label.trim() || trimmedId, type }
+        profile = {
+          ...existing,
+          label: label.trim() || trimmedId,
+          type,
+          isPaper: options?.isPaper ?? existing.isPaper,
+        }
       } else {
         isNew = true
-        profile = { id: trimmedId, label: label.trim() || trimmedId, type, createdAt: now }
+        profile = {
+          id: trimmedId,
+          label: label.trim() || trimmedId,
+          type,
+          isPaper: Boolean(options?.isPaper),
+          createdAt: now,
+        }
       }
 
       if (cloudEnabled && userIdRef.current) {
@@ -405,9 +419,11 @@ export function TradeStoreProvider({
   const updateAccount = useCallback((id: string, updates: {
     label?: string
     type?: AccountType
+    isPaper?: boolean
     startingCapital?: number
     currentCapital?: number
     totalDeposits?: number
+    paperSettings?: Partial<PaperAccountSettings>
   }) => {
     setAccountProfiles((prev) => {
       const existing = prev.find((p) => p.id === id)
@@ -417,19 +433,33 @@ export function TradeStoreProvider({
           ...existing,
           label: updates.label !== undefined ? updates.label.trim() || id : existing.label,
           type: updates.type ?? existing.type,
-          startingCapital: updates.startingCapital ?? existing.startingCapital,
-          currentCapital: updates.currentCapital ?? existing.currentCapital,
-          totalDeposits: updates.totalDeposits ?? existing.totalDeposits,
+          isPaper: updates.isPaper !== undefined ? updates.isPaper : existing.isPaper,
+          startingCapital: updates.startingCapital !== undefined
+            ? updates.startingCapital
+            : existing.startingCapital,
+          currentCapital: updates.currentCapital !== undefined
+            ? updates.currentCapital
+            : existing.currentCapital,
+          totalDeposits: updates.totalDeposits !== undefined
+            ? updates.totalDeposits
+            : existing.totalDeposits,
+          paperSettings: updates.paperSettings
+            ? resolvePaperSettings({ ...existing.paperSettings, ...updates.paperSettings })
+            : existing.paperSettings,
         }
       } else {
         profile = {
           id,
           label: updates.label?.trim() || id,
           type: updates.type ?? inferAccountType(trades.filter((t) => t.account === id)),
+          isPaper: Boolean(updates.isPaper),
           createdAt: new Date().toISOString(),
           startingCapital: updates.startingCapital,
           currentCapital: updates.currentCapital,
           totalDeposits: updates.totalDeposits,
+          paperSettings: updates.paperSettings
+            ? resolvePaperSettings(updates.paperSettings)
+            : undefined,
         }
       }
 
@@ -480,20 +510,31 @@ export function TradeStoreProvider({
     setAccountOrder(next)
   }, [trades, accountProfiles])
 
+  const paperAccountIds = useMemo(() => {
+    return new Set(accountProfiles.filter((p) => p.isPaper).map((p) => p.id))
+  }, [accountProfiles])
+
   const filteredTrades = useMemo(() => {
-    if (selectedAccount === 'all') return trades
+    if (selectedAccount === 'all') {
+      // 「全部」只汇总实盘，Paper 账户需点进该账户查看
+      return trades.filter((t) => !paperAccountIds.has(t.account))
+    }
     return trades.filter((t) => t.account === selectedAccount)
-  }, [trades, selectedAccount])
+  }, [trades, selectedAccount, paperAccountIds])
 
   const filteredJournal = useMemo(() => {
-    if (selectedAccount === 'all') return journal
+    if (selectedAccount === 'all') {
+      return journal.filter((j) => !paperAccountIds.has(j.account))
+    }
     return journal.filter((j) => j.account === selectedAccount)
-  }, [journal, selectedAccount])
+  }, [journal, selectedAccount, paperAccountIds])
 
   const filteredPlaybook = useMemo(() => {
-    if (selectedAccount === 'all') return playbook
+    if (selectedAccount === 'all') {
+      return playbook.filter((p) => !paperAccountIds.has(p.account))
+    }
     return playbook.filter((p) => p.account === selectedAccount)
-  }, [playbook, selectedAccount])
+  }, [playbook, selectedAccount, paperAccountIds])
 
   const accounts = useMemo(() => {
     const rawIds = collectAccountIds(trades, accountProfiles)
@@ -514,6 +555,7 @@ export function TradeStoreProvider({
         id,
         label: profile?.label ?? id,
         type: profile?.type ?? inferAccountType(accountTrades),
+        isPaper: Boolean(profile?.isPaper),
         tradeCount: accountTrades.length,
         totalPnl,
         startingCapital: startingCapital > 0 ? startingCapital : profile?.startingCapital,
@@ -542,6 +584,7 @@ export function TradeStoreProvider({
     if (cloudEnabled && userIdRef.current) {
       cloudWrite(() => upsertTrade(userIdRef.current!, trade))
     }
+    return trade.id
   }, [cloudEnabled, cloudWrite])
 
   const updateTrade = useCallback((id: string, updates: Partial<Trade>) => {
@@ -549,7 +592,15 @@ export function TradeStoreProvider({
       prev.map((t) => {
         if (t.id !== id) return t
         const merged = { ...t, ...updates, updatedAt: new Date().toISOString() }
-        merged.pnl = computePnl(merged)
+        const priceTouched = (
+          ['side', 'entryPrice', 'exitPrice', 'quantity', 'fees', 'status'] as const
+        ).some((key) => key in updates)
+
+        if (updates.pnl !== undefined) {
+          merged.pnl = updates.pnl
+        } else if (priceTouched) {
+          merged.pnl = computePnl(merged)
+        }
 
         if (cloudEnabled && userIdRef.current) {
           cloudWrite(() => upsertTrade(userIdRef.current!, merged))

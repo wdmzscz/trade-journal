@@ -64,17 +64,18 @@ export function CalendarPage() {
   }, [selectedAccount, filteredTrades])
 
   const capitalContext = useMemo(() => {
+    const liveProfiles = accountProfiles.filter((p) => !p.isPaper)
     if (selectedAccount === 'all') {
       return {
-        startingCapital: accountProfiles.reduce(
+        startingCapital: liveProfiles.reduce(
           (sum, profile) =>
             sum + resolvePrincipalCapital(profile.startingCapital ?? 0, profile.totalDeposits),
           0
         ),
-        currentCapital: accountProfiles.reduce((s, p) => s + (p.currentCapital ?? 0), 0),
-        totalDeposits: accountProfiles.reduce((s, p) => s + (p.totalDeposits ?? 0), 0),
-        cashFlows: accountProfiles.flatMap((p) => p.cashFlows ?? []),
-        navHistory: accountProfiles.flatMap((p) => p.navHistory ?? []),
+        currentCapital: liveProfiles.reduce((s, p) => s + (p.currentCapital ?? 0), 0),
+        totalDeposits: liveProfiles.reduce((s, p) => s + (p.totalDeposits ?? 0), 0),
+        cashFlows: liveProfiles.flatMap((p) => p.cashFlows ?? []),
+        navHistory: liveProfiles.flatMap((p) => p.navHistory ?? []),
       }
     }
     const profile = accountProfiles.find((p) => p.id === selectedAccount)

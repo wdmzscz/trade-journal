@@ -105,6 +105,8 @@ async function upsertProfile(
     label,
     type: existing?.type ?? inferAccountType(accountTrades),
     created_at: existing?.created_at ?? now,
+    is_paper: existing?.is_paper ?? false,
+    paper_settings: existing?.paper_settings ?? {},
     starting_capital:
       reliableFinancials?.navHistory?.length
         ? (reliableFinancials.startingCapital ?? existing?.starting_capital ?? null)

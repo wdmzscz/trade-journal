@@ -14,11 +14,13 @@ export function AccountScopeBanner({ className }: { className?: string }) {
 
   const principalCapital = selectedProfile
     ? resolvePrincipalCapital(selectedProfile.startingCapital ?? 0, selectedProfile.totalDeposits)
-    : accountProfiles.reduce(
-        (sum, profile) =>
-          sum + resolvePrincipalCapital(profile.startingCapital ?? 0, profile.totalDeposits),
-        0
-      )
+    : accountProfiles
+        .filter((profile) => !profile.isPaper)
+        .reduce(
+          (sum, profile) =>
+            sum + resolvePrincipalCapital(profile.startingCapital ?? 0, profile.totalDeposits),
+          0
+        )
 
   const otherAccountsWithData = accountInfos.filter(
     (a) => a.id !== selectedAccount && a.tradeCount > 0
@@ -35,6 +37,7 @@ export function AccountScopeBanner({ className }: { className?: string }) {
       >
         <p className="text-sm text-brand-900 dark:text-slate-100">
           <span className="font-semibold">全部账户汇总</span>
+          <span className="ml-1 text-xs font-normal text-brand-600/80 dark:text-slate-400">（不含 Paper）</span>
           <span className="mx-2 text-brand-300 dark:text-slate-500">|</span>
           {filteredTrades.length} 笔交易
           {principalCapital > 0 && (
@@ -59,12 +62,14 @@ export function AccountScopeBanner({ className }: { className?: string }) {
   }
 
   const label = selectedAccountInfo?.label ?? selectedAccount
+  const isPaper = Boolean(selectedAccountInfo?.isPaper)
 
   if (filteredTrades.length === 0) {
     return (
       <div className={cn('rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/30', className)}>
         <p className="text-sm text-amber-900 dark:text-amber-100">
           <span className="font-semibold">{label}</span>
+          {isPaper && <span className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-violet-700 dark:bg-violet-950 dark:text-violet-300">Paper</span>}
           <span className="mx-2 text-amber-300 dark:text-amber-700">|</span>
           该账户暂无交易数据
         </p>
@@ -97,6 +102,11 @@ export function AccountScopeBanner({ className }: { className?: string }) {
     <div className={cn('rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-surface-700 dark:bg-surface-900', className)}>
       <p className="text-sm text-slate-700 dark:text-slate-300">
         <span className="font-semibold text-slate-900 dark:text-slate-100">{label}</span>
+        {isPaper && (
+          <span className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+            Paper
+          </span>
+        )}
         {label !== selectedAccount && (
           <span className="ml-2 text-slate-400">({selectedAccount})</span>
         )}
