@@ -9,12 +9,15 @@
     <title>Trade Journal</title>
     <script>
       try {
-        var pref = localStorage.getItem('trade-journal-theme-v2')
+        var pref = localStorage.getItem('trade-journal-theme-v3')
+          || localStorage.getItem('trade-journal-theme-v2')
         var hour = new Date().getHours()
         var timeDark = hour < 7 || hour >= 19
+        var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches
         var dark =
           pref === 'dark' ||
-          ((pref === 'system' || pref == null) && timeDark)
+          (pref === 'time' && timeDark) ||
+          ((pref === 'system' || pref == null) && systemDark)
         if (dark) {
           document.documentElement.classList.add('dark')
           document.documentElement.style.colorScheme = 'dark'
