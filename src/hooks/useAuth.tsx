@@ -31,23 +31,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    let cancelled = false
+    const timeouts: ReturnType<typeof setTimeout>[] = []
     const supabase = getSupabase()
 
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s)
-      setUser(s?.user ?? null)
-      setLoading(false)
-    })
-
+    // 只监听 onAuthStateChange（会发 INITIAL_SESSION）。
+    // 回调期间 supabase-js 会持有 auth lock，立刻打 PostgREST 会永久挂起。
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s)
-      setUser(s?.user ?? null)
-      setLoading(false)
+      const timer = setTimeout(() => {
+        if (cancelled) return
+        setSession(s)
+        setUser(s?.user ?? null)
+        setLoading(false)
+      }, 0)
+      timeouts.push(timer)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      cancelled = true
+      timeouts.forEach(clearTimeout)
+      subscription.unsubscribe()
+    }
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
