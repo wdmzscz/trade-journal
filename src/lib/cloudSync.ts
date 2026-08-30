@@ -278,14 +278,20 @@ function profileToRow(profile: AccountProfile, userId: string): ProfileRow {
   }
 }
 
-export async function fetchAllData(userId: string): Promise<CloudData> {
+export async function fetchAllData(userId: string, signal?: AbortSignal): Promise<CloudData> {
+  if (signal?.aborted) {
+    throw new DOMException('The operation was aborted.', 'AbortError')
+  }
+
   const supabase = getSupabase()
+  const attach = <T extends { abortSignal: (s: AbortSignal) => T }>(query: T) =>
+    signal ? query.abortSignal(signal) : query
 
   const [tradesRes, journalRes, profilesRes, playbookRes] = await Promise.all([
-    supabase.from('trades').select('*').eq('user_id', userId),
-    supabase.from('journal_entries').select('*').eq('user_id', userId),
-    supabase.from('account_profiles').select('*').eq('user_id', userId),
-    supabase.from('playbook_entries').select('*').eq('user_id', userId),
+    attach(supabase.from('trades').select('*').eq('user_id', userId)),
+    attach(supabase.from('journal_entries').select('*').eq('user_id', userId)),
+    attach(supabase.from('account_profiles').select('*').eq('user_id', userId)),
+    attach(supabase.from('playbook_entries').select('*').eq('user_id', userId)),
   ])
 
   if (tradesRes.error) throw tradesRes.error

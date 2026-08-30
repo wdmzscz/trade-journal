@@ -143,6 +143,26 @@ function reconcileSelectedAccount(selected: string, trades: Trade[]): string {
   return bestCount > 0 ? bestAccount : 'all'
 }
 
+const CLOUD_SYNC_TIMEOUT_MS = 15000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(message))
+    }, ms)
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId)
+        resolve(value)
+      },
+      (err) => {
+        window.clearTimeout(timeoutId)
+        reject(err)
+      }
+    )
+  })
+}
+
 function inferAccountType(trades: Trade[]): AccountType {
   const futures = trades.filter((t) => t.assetClass === 'futures').length
   const stocks = trades.filter((t) => t.assetClass === 'stock').length
@@ -257,66 +277,116 @@ export function TradeStoreProvider({
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloudEnabled ? 'loading' : 'idle')
   const [cloudReady, setCloudReady] = useState(!cloudEnabled)
 
+  const applyData = useCallback((data: {
+    trades: Trade[]
+    journal: JournalEntry[]
+    profiles: AccountProfile[]
+    playbook: PlaybookEntry[]
+  }) => {
+    setTrades(data.trades)
+    setJournal(data.journal)
+    setAccountProfiles(data.profiles)
+    setPlaybook(data.playbook)
+    setSelectedAccountState((current) => reconcileSelectedAccount(current, data.trades))
+  }, [])
+
   const refetchFromCloud = useCallback(async () => {
     if (!userIdRef.current) return
     try {
       const data = await fetchAllData(userIdRef.current)
-      setTrades(data.trades)
-      setJournal(data.journal)
-      setAccountProfiles(data.profiles)
-      setPlaybook(data.playbook)
-      setSelectedAccountState((current) => reconcileSelectedAccount(current, data.trades))
+      applyData(data)
       setSyncStatus('idle')
     } catch {
       setSyncStatus('error')
     }
-  }, [])
+  }, [applyData])
 
   useEffect(() => {
     if (!cloudEnabled || !userId) return
 
     let cancelled = false
+    const controller = new AbortController()
 
     async function init() {
       setSyncStatus('loading')
       try {
-        let data = await fetchAllData(userId!)
+        // 等 auth lock 释放后再打 PostgREST，避免首次打开永久挂起
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 0)
+        })
+        if (cancelled) return
 
-        if (data.trades.length === 0 && data.journal.length === 0 && data.profiles.length === 0 && data.playbook.length === 0) {
+        let data = await withTimeout(
+          fetchAllData(userId!, controller.signal),
+          CLOUD_SYNC_TIMEOUT_MS,
+          '云端同步超时'
+        )
+
+        const cloudEmpty =
+          data.trades.length === 0 &&
+          data.journal.length === 0 &&
+          data.profiles.length === 0 &&
+          data.playbook.length === 0
+
+        if (cloudEmpty) {
           const localTrades = loadTrades()
           const localJournal = loadJournal()
           const localProfiles = loadProfiles()
           const localPlaybook = loadPlaybook()
-          if (localTrades.length > 0 || localJournal.length > 0 || localProfiles.length > 0 || localPlaybook.length > 0) {
-            await uploadAllData(userId!, {
+          if (
+            localTrades.length > 0 ||
+            localJournal.length > 0 ||
+            localProfiles.length > 0 ||
+            localPlaybook.length > 0
+          ) {
+            data = {
               trades: localTrades,
               journal: localJournal,
               profiles: localProfiles,
               playbook: localPlaybook,
-            })
-            data = { trades: localTrades, journal: localJournal, profiles: localProfiles, playbook: localPlaybook }
+            }
+            if (!cancelled) {
+              applyData(data)
+              setSyncStatus('syncing')
+              setCloudReady(true)
+            }
+            void uploadAllData(userId!, data)
+              .then(() => {
+                if (!cancelled) setSyncStatus('idle')
+              })
+              .catch((err) => {
+                console.warn('本地数据上传云端失败', err)
+                if (!cancelled) setSyncStatus('error')
+              })
+            return
           }
         }
 
         if (!cancelled) {
-          setTrades(data.trades)
-          setJournal(data.journal)
-          setAccountProfiles(data.profiles)
-          setPlaybook(data.playbook)
-          setSelectedAccountState((current) => reconcileSelectedAccount(current, data.trades))
+          applyData(data)
           setSyncStatus('idle')
           setCloudReady(true)
         }
-      } catch {
-        if (!cancelled) setSyncStatus('error')
+      } catch (err) {
+        if (cancelled) return
+        console.warn('云端同步失败，改用本地缓存', err)
+        applyData({
+          trades: loadTrades(),
+          journal: loadJournal(),
+          profiles: loadProfiles(),
+          playbook: loadPlaybook(),
+        })
+        setSyncStatus('error')
+        setCloudReady(true)
       }
     }
 
-    init()
+    void init()
     return () => {
       cancelled = true
+      controller.abort()
     }
-  }, [cloudEnabled, userId])
+  }, [applyData, cloudEnabled, userId])
 
   useEffect(() => {
     if (!cloudEnabled || !userId || !cloudReady) return
