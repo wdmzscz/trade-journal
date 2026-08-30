@@ -105,20 +105,26 @@ export function AccountTabs() {
   }
 
   const handleAdd = () => {
-    if (!formId.trim()) return
-    registerAccount(formId.trim(), formLabel.trim() || formId.trim(), formType, { isPaper: formIsPaper })
+    if (formIsPaper) {
+      if (!formLabel.trim()) return
+      registerAccount(formId.trim(), formLabel.trim(), formType, { isPaper: true })
+    } else {
+      if (!formId.trim()) return
+      registerAccount(formId.trim(), formLabel.trim() || formId.trim(), formType, { isPaper: false })
+    }
     closeModal()
   }
 
   const handleSaveEdit = () => {
     if (!editingAccount) return
+    if (formIsPaper && !formLabel.trim()) return
     if (formIsPaper) {
       const balance = formStartingCapital.trim() ? Number(formStartingCapital) : undefined
       const current = formCurrentCapital.trim()
         ? Number(formCurrentCapital)
         : balance
       updateAccount(editingAccount.id, {
-        label: formLabel,
+        label: formLabel.trim(),
         type: formType,
         isPaper: true,
         startingCapital: balance,
@@ -246,19 +252,54 @@ export function AccountTabs() {
       {modal === 'add' && (
         <AccountModal title="添加账户" onClose={closeModal}>
           <div className="space-y-4">
-            <Field label="账户 ID" hint="如 IBKR 账户号 U25840333，导入 CSV 时会自动匹配">
-              <input value={formId} onChange={(e) => setFormId(e.target.value)} placeholder="U25840333" className="form-input" autoFocus />
-            </Field>
-            <Field label="显示名称" hint="在标签页上显示的名字">
-              <input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="期货账户" className="form-input" />
-            </Field>
+            {formIsPaper ? (
+              <>
+                <Field label="显示名称" hint="在标签页上显示的名字" required>
+                  <input
+                    value={formLabel}
+                    onChange={(e) => setFormLabel(e.target.value)}
+                    placeholder="我的模拟盘"
+                    className="form-input"
+                    autoFocus
+                  />
+                </Field>
+                <Field label="账户 ID" hint="可不填；留空则用显示名称作为内部 ID">
+                  <input
+                    value={formId}
+                    onChange={(e) => setFormId(e.target.value)}
+                    placeholder="可选"
+                    className="form-input"
+                  />
+                </Field>
+              </>
+            ) : (
+              <>
+                <Field label="账户 ID" hint="如 IBKR 账户号 U25840333，导入 CSV 时会自动匹配" required>
+                  <input
+                    value={formId}
+                    onChange={(e) => setFormId(e.target.value)}
+                    placeholder="U25840333"
+                    className="form-input"
+                    autoFocus
+                  />
+                </Field>
+                <Field label="显示名称" hint="在标签页上显示的名字，可不填（默认用账户 ID）">
+                  <input
+                    value={formLabel}
+                    onChange={(e) => setFormLabel(e.target.value)}
+                    placeholder="期货账户"
+                    className="form-input"
+                  />
+                </Field>
+              </>
+            )}
             <TypePicker value={formType} onChange={setFormType} />
             <PaperToggle value={formIsPaper} onChange={setFormIsPaper} />
           </div>
           <ModalActions
             primaryLabel="添加"
             onPrimary={handleAdd}
-            primaryDisabled={!formId.trim()}
+            primaryDisabled={formIsPaper ? !formLabel.trim() : !formId.trim()}
             onCancel={closeModal}
           />
           <ImportHint onClose={closeModal} isPaper={formIsPaper} />
@@ -269,11 +310,23 @@ export function AccountTabs() {
       {modal === 'edit' && editingAccount && (
         <AccountModal title="编辑账户" onClose={closeModal}>
           <div className="space-y-4">
-            <Field label="账户 ID">
-              <input value={formId} disabled className="form-input cursor-not-allowed bg-slate-50 dark:bg-surface-800 text-slate-500 dark:text-slate-400" />
-            </Field>
-            <Field label="显示名称">
-              <input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="期货账户" className="form-input" autoFocus />
+            {!formIsPaper && (
+              <Field label="账户 ID">
+                <input value={formId} disabled className="form-input cursor-not-allowed bg-slate-50 dark:bg-surface-800 text-slate-500 dark:text-slate-400" />
+              </Field>
+            )}
+            <Field
+              label="显示名称"
+              hint={formIsPaper ? '在标签页上显示的名字' : undefined}
+              required={formIsPaper}
+            >
+              <input
+                value={formLabel}
+                onChange={(e) => setFormLabel(e.target.value)}
+                placeholder={formIsPaper ? '我的模拟盘' : '期货账户'}
+                className="form-input"
+                autoFocus
+              />
             </Field>
             <TypePicker value={formType} onChange={setFormType} />
             <PaperToggle value={formIsPaper} onChange={setFormIsPaper} />
@@ -338,7 +391,12 @@ export function AccountTabs() {
             </div>
           </div>
 
-          <ModalActions primaryLabel="保存" onPrimary={handleSaveEdit} onCancel={closeModal} />
+          <ModalActions
+            primaryLabel="保存"
+            onPrimary={handleSaveEdit}
+            primaryDisabled={formIsPaper && !formLabel.trim()}
+            onCancel={closeModal}
+          />
 
           <div className="mt-6 border-t border-slate-100 dark:border-surface-800 pt-4">
             {!confirmDelete ? (
@@ -715,10 +773,23 @@ function ImportHint({ onClose, isPaper }: { onClose: () => void; isPaper?: boole
   )
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  required,
+  children,
+}: {
+  label: string
+  hint?: string
+  required?: boolean
+  children: React.ReactNode
+}) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+        {label}
+        {required && <span className="ml-0.5 text-red-500 dark:text-red-400">*</span>}
+      </label>
       {hint && <p className="mb-1.5 text-xs text-slate-400">{hint}</p>}
       {children}
     </div>

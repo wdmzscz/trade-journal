@@ -49,6 +49,15 @@ function loadAccountOrder(userId?: string): string[] {
   }
 }
 
+function uniqueAccountId(preferred: string, existing: Iterable<string>): string {
+  const used = new Set(existing)
+  const base = preferred.trim() || 'paper'
+  if (base !== 'all' && !used.has(base)) return base
+  let n = 2
+  while (used.has(`${base}-${n}`)) n += 1
+  return `${base}-${n}`
+}
+
 function collectAccountIds(trades: Trade[], accountProfiles: AccountProfile[]): string[] {
   const ids = new Set<string>()
   accountProfiles.forEach((p) => ids.add(p.id))
@@ -444,8 +453,16 @@ export function TradeStoreProvider({
   }, [])
 
   const registerAccount = useCallback((id: string, label: string, type: AccountType, options?: { isPaper?: boolean }) => {
-    const trimmedId = id.trim()
-    if (!trimmedId) return
+    const trimmedLabel = label.trim()
+    const isPaper = Boolean(options?.isPaper)
+    if (isPaper && !trimmedLabel) return
+
+    let trimmedId = id.trim()
+    if (!trimmedId) {
+      if (!isPaper) return
+      trimmedId = uniqueAccountId(trimmedLabel, collectAccountIds(trades, accountProfiles))
+    }
+
     const now = new Date().toISOString()
     let isNew = false
 
@@ -455,7 +472,7 @@ export function TradeStoreProvider({
       if (existing) {
         profile = {
           ...existing,
-          label: label.trim() || trimmedId,
+          label: trimmedLabel || trimmedId,
           type,
           isPaper: options?.isPaper ?? existing.isPaper,
         }
@@ -463,9 +480,9 @@ export function TradeStoreProvider({
         isNew = true
         profile = {
           id: trimmedId,
-          label: label.trim() || trimmedId,
+          label: trimmedLabel || trimmedId,
           type,
-          isPaper: Boolean(options?.isPaper),
+          isPaper: isPaper,
           createdAt: now,
         }
       }
@@ -484,7 +501,7 @@ export function TradeStoreProvider({
       setAccountOrder((order) => (order.includes(trimmedId) ? order : [...order, trimmedId]))
     }
     setSelectedAccountState(trimmedId)
-  }, [cloudEnabled, cloudWrite])
+  }, [accountProfiles, cloudEnabled, cloudWrite, trades])
 
   const updateAccount = useCallback((id: string, updates: {
     label?: string
