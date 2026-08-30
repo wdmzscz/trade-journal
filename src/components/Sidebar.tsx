@@ -11,6 +11,7 @@ import {
   RefreshCw,
   BookMarked,
   FlaskConical,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { StorageInfo } from './StorageInfo'
@@ -23,6 +24,7 @@ const navItems = [
   { to: '/trades', label: 'Trades', icon: List },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/playbook', label: 'Playbook', icon: BookMarked },
+  { to: '/coach', label: 'Coach', icon: Sparkles, badge: 'Beta', badgeNote: '试用' },
   { to: '/journal', label: 'Daily Journal', icon: BookOpen },
   { to: '/add-trade', label: 'Add Trade', icon: PlusCircle },
   { to: '/import', label: 'Import CSV', icon: Upload },
@@ -47,7 +49,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3 sm:p-4">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {navItems.map(({ to, label, icon: Icon, badge, badgeNote }) => (
           <NavLink
             key={to}
             to={to}
@@ -62,8 +64,23 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               )
             }
           >
-            <Icon className="h-4 w-4 shrink-0" />
-            {label}
+            {({ isActive }) => (
+              <>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span>{label}</span>
+                {badge && (
+                  <span
+                    title={badgeNote}
+                    className={cn(
+                      'ml-auto rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                      isActive ? 'bg-white/20 text-white' : 'bg-amber-500/20 text-amber-300'
+                    )}
+                  >
+                    {badge}
+                  </span>
+                )}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>

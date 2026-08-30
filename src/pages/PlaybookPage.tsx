@@ -263,6 +263,10 @@ export function PlaybookPage() {
       title: `${trade.symbol} ${trade.setup ?? caseLabel}`,
       thesis: trade.notes ?? '',
       outcome: outcome === 'breakeven' ? 'win' : outcome,
+      pnl: String(trade.pnl),
+      rMultiple: trade.rMultiple != null ? String(trade.rMultiple) : '',
+      maxRr: trade.maxRr != null ? String(trade.maxRr) : '',
+      stopLoss: trade.stopLoss != null ? String(trade.stopLoss) : '',
     })
     setCharts(mergePlaybookChartSlots(trade.entryCharts))
   }
@@ -313,7 +317,9 @@ export function PlaybookPage() {
       } else {
         paperPnl = Number(form.pnl)
       }
-      if (form.rMultiple.trim() && !Number.isNaN(Number(form.rMultiple))) {
+      if (form.rMultiple.trim() === '' || Number.isNaN(Number(form.rMultiple))) {
+        errors.push('请填写赚了几 R（盈利填正数，亏损填负数）')
+      } else {
         paperR = Number(form.rMultiple)
       }
       if (form.maxRr.trim() && !Number.isNaN(Number(form.maxRr))) {
@@ -362,9 +368,10 @@ export function PlaybookPage() {
           setup: form.setup.trim() || undefined,
           tags: form.tags.split(/[,;]/).map((t) => t.trim()).filter(Boolean),
           notes: form.thesis.trim() || undefined,
+          entryCharts: validCharts,
           account,
         })
-      } else if (paperPnl != null || paperR != null || paperMaxRr != null || paperStopLoss != null) {
+      } else {
         updateTrade(tradeId, {
           symbol,
           entryDate: entryIso,
@@ -374,6 +381,8 @@ export function PlaybookPage() {
           ...(paperMaxRr != null ? { maxRr: paperMaxRr } : {}),
           ...(paperStopLoss != null ? { stopLoss: paperStopLoss } : {}),
           setup: form.setup.trim() || undefined,
+          notes: form.thesis.trim() || undefined,
+          entryCharts: validCharts,
         })
       }
 
@@ -393,6 +402,8 @@ export function PlaybookPage() {
           currentCapital: balance + priorPnl + delta,
         })
       }
+    } else if (tradeId) {
+      updateTrade(tradeId, { entryCharts: validCharts })
     }
 
     savePlaybookEntry({
@@ -441,7 +452,7 @@ export function PlaybookPage() {
             <h1 className="page-title">Playbook</h1>
           </div>
           <p className="page-subtitle mt-1">
-            收藏盈利与亏损交易模板，复盘成功经验，也警惕失败模式
+            收藏盈利与亏损模板。Paper 账户新建案例会同时记一笔交易（盈亏 $、赚了几 R、EVC）。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -548,7 +559,9 @@ export function PlaybookPage() {
                 ? '还没有盈利图鉴案例'
                 : '还没有收藏的交易案例'}
           </p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">从已平仓交易一键添加，或手动创建多周期图鉴</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Paper 账户直接新建案例即可记账；实盘也可从已平仓交易添加，或手动创建 EVC 图鉴
+          </p>
         </div>
       ) : (
         <div className="grid gap-6 xl:grid-cols-2">
@@ -556,6 +569,7 @@ export function PlaybookPage() {
             <PlaybookCard
               key={entry.id}
               entry={entry}
+              rMultiple={entry.tradeId ? filteredTrades.find((t) => t.id === entry.tradeId)?.rMultiple : undefined}
               onEdit={() => openEdit(entry)}
               onTogglePin={() => togglePlaybookPinned(entry.id)}
               onDelete={() => {
@@ -708,7 +722,7 @@ export function PlaybookPage() {
                     模拟交易记录
                   </p>
                   <p className="mb-3 text-xs text-violet-700/90 dark:text-violet-300/80">
-                    填写盈亏后保存，会自动生成一笔交易并进入 Dashboard / 日历 / 图表统计。
+                    填写盈亏 $ 和赚了几 R 后保存，会自动生成一笔交易并进入 Dashboard / 日历 / 图表统计。和 Add Trade 同一套字段。
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="盈亏金额 $" required>
@@ -721,7 +735,7 @@ export function PlaybookPage() {
                         className="form-input"
                       />
                     </Field>
-                    <Field label="盈亏 R（可选）">
+                    <Field label="赚了几 R" hint="盈利填正数，亏损填负数" required>
                       <input
                         type="number"
                         step="0.01"
@@ -762,6 +776,21 @@ export function PlaybookPage() {
                       />
                     </Field>
                   </div>
+                  {form.pnl !== '' && !Number.isNaN(Number(form.pnl)) && (
+                    <div
+                      className={cn(
+                        'mt-3 rounded-lg p-3 text-center text-sm font-semibold',
+                        Number(form.pnl) >= 0
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                          : 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
+                      )}
+                    >
+                      记录盈亏: {formatCurrency(Number(form.pnl))}
+                      {form.rMultiple.trim() && !Number.isNaN(Number(form.rMultiple))
+                        ? ` · ${Number(form.rMultiple) >= 0 ? '+' : ''}${Number(form.rMultiple).toFixed(2)}R`
+                        : ''}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -872,11 +901,13 @@ export function PlaybookPage() {
 
 function PlaybookCard({
   entry,
+  rMultiple,
   onEdit,
   onDelete,
   onTogglePin,
 }: {
   entry: PlaybookEntry
+  rMultiple?: number
   onEdit: () => void
   onDelete: () => void
   onTogglePin: () => void
@@ -922,6 +953,11 @@ function PlaybookCard({
               {entry.pnl != null && (
                 <span className="ml-1">
                   · <PnlBadge value={entry.pnl} className="inline" />
+                </span>
+              )}
+              {rMultiple != null && Number.isFinite(rMultiple) && (
+                <span className="ml-1 font-medium text-slate-600 dark:text-slate-300">
+                  · {rMultiple >= 0 ? '+' : ''}{rMultiple.toFixed(2)}R
                 </span>
               )}
             </p>
