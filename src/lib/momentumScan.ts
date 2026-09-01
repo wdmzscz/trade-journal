@@ -1,3 +1,5 @@
+import { getSupabase, isCloudEnabled } from './supabase'
+
 export type ScanMode = 'any' | 'volspike' | 'quietspike' | 'stage12'
 export type ScanTimeframe = '1h' | '1d' | '1w'
 export type MbTarget = '2' | '3' | '2-3'
@@ -728,6 +730,32 @@ export function tvInterval(tf: ScanTimeframe): string {
   return 'D'
 }
 
+function yahooProxyBase(): string | null {
+  if (!isCloudEnabled()) return null
+  const base = import.meta.env.VITE_SUPABASE_URL
+  return `${base.replace(/\/$/, '')}/functions/v1/yahoo-proxy`
+}
+
+async function yahooFetch(url: string, signal?: AbortSignal): Promise<Response> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (url.includes('/functions/v1/yahoo-proxy')) {
+    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY
+    if (anon) {
+      headers.apikey = anon
+      headers.Authorization = `Bearer ${anon}`
+    }
+    try {
+      const { data } = await getSupabase().auth.getSession()
+      if (data.session?.access_token) {
+        headers.Authorization = `Bearer ${data.session.access_token}`
+      }
+    } catch {
+      /* not logged in — gateway still accepts the anon key when JWT verification is off */
+    }
+  }
+  return fetch(url, { signal, headers })
+}
+
 export function tvWidgetUrl(symbol: string, tf: ScanTimeframe, theme: 'light' | 'dark'): string {
   const url = new URL('https://www.tradingview.com/widgetembed/')
   url.searchParams.set('symbol', yahooSymbol(symbol).replace(/-/g, '.'))
@@ -746,26 +774,31 @@ export function tvWidgetUrl(symbol: string, tf: ScanTimeframe, theme: 'light' | 
   return url.toString()
 }
 
-export function chartUrls(tf: ScanTimeframe): string[] {
+export function chartUrls(symbol: string, tf: ScanTimeframe): string[] {
   const { interval, range } = yahooRange(tf)
+  const ysym = encodeURIComponent(yahooSymbol(symbol))
   const qs = `interval=${interval}&range=${range}&includePrePost=false`
-  return [
-    `/yahoo/v8/finance/chart/{symbol}?${qs}`,
-    `https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?${qs}`,
-    `https://query2.finance.yahoo.com/v8/finance/chart/{symbol}?${qs}`,
-  ]
+  const urls: string[] = []
+  if (import.meta.env.DEV) {
+    urls.push(`/yahoo/v8/finance/chart/${ysym}?${qs}`)
+  }
+  const proxy = yahooProxyBase()
+  if (proxy) {
+    const proxyQs = new URLSearchParams({ kind: 'chart', symbol: yahooSymbol(symbol), interval, range })
+    urls.push(`${proxy}?${proxyQs}`)
+  }
+  urls.push(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${ysym}?${qs}`,
+    `https://query2.finance.yahoo.com/v8/finance/chart/${ysym}?${qs}`,
+  )
+  return urls
 }
 
 export async function fetchYahooBars(symbol: string, tf: ScanTimeframe, signal?: AbortSignal): Promise<Bar[]> {
-  const ysym = encodeURIComponent(yahooSymbol(symbol))
   let lastError: unknown
-  for (const template of chartUrls(tf)) {
-    const url = template.replace('{symbol}', ysym)
+  for (const url of chartUrls(symbol, tf)) {
     try {
-      const res = await fetch(url, {
-        signal,
-        headers: { Accept: 'application/json' },
-      })
+      const res = await yahooFetch(url, signal)
       if (!res.ok) {
         lastError = new Error(`HTTP ${res.status}`)
         continue
@@ -798,12 +831,25 @@ type YahooQuoteResponse = {
 }
 
 function quoteUrls(symbols: string[]): string[] {
-  const qs = `symbols=${symbols.map((s) => encodeURIComponent(yahooSymbol(s))).join(',')}&crumb=`
-  return [
-    `/yahoo/v7/finance/quote?${qs}`,
+  const joined = symbols.map((s) => encodeURIComponent(yahooSymbol(s))).join(',')
+  const qs = `symbols=${joined}&crumb=`
+  const urls: string[] = []
+  if (import.meta.env.DEV) {
+    urls.push(`/yahoo/v7/finance/quote?${qs}`)
+  }
+  const proxy = yahooProxyBase()
+  if (proxy) {
+    const proxyQs = new URLSearchParams({
+      kind: 'quote',
+      symbols: symbols.map((s) => yahooSymbol(s)).join(','),
+    })
+    urls.push(`${proxy}?${proxyQs}`)
+  }
+  urls.push(
     `https://query1.finance.yahoo.com/v7/finance/quote?${qs}`,
     `https://query2.finance.yahoo.com/v7/finance/quote?${qs}`,
-  ]
+  )
+  return urls
 }
 
 export async function fetchYahooQuotes(symbols: string[], signal?: AbortSignal): Promise<Map<string, ExtQuote>> {
@@ -816,7 +862,7 @@ export async function fetchYahooQuotes(symbols: string[], signal?: AbortSignal):
     let ok = false
     for (const url of quoteUrls(chunk)) {
       try {
-        const res = await fetch(url, { signal, headers: { Accept: 'application/json' } })
+        const res = await yahooFetch(url, signal)
         if (!res.ok) {
           lastError = new Error(`HTTP ${res.status}`)
           continue

@@ -269,7 +269,7 @@ export function ScreenerPage() {
       const message = err instanceof Error ? err.message : '扫描失败'
       setError(
         /Failed to fetch|NetworkError|CORS/i.test(message)
-          ? '浏览器拉不到行情。请用 npm run dev 打开本页再扫（开发服务器会代理 Yahoo）。'
+          ? '浏览器拉不到行情。请确认已登录，或用 npm run dev 在本机再扫。'
           : message,
       )
       setStatus('扫描中断')
