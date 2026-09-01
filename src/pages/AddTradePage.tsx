@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { FlaskConical, TrendingUp, TrendingDown } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { ChartLinkFields } from '../components/ChartLinkFields'
-import { calculateTradePnl, formatCurrency } from '../utils/stats'
+import { calculateTradePnl, formatCurrency, formatRMultiple, computePaperSignedResult, resolvePaperPrincipal, DEFAULT_PAPER_PRINCIPAL } from '../utils/stats'
 import type { ChartLink, PlaybookOutcome, TradeSide, TradeStatus } from '../types'
-import { PLAYBOOK_TIMEFRAMES } from '../types'
+import { PLAYBOOK_TIMEFRAMES, resolvePaperSettings } from '../types'
 import { mergePlaybookChartSlots, normalizeChartLinks } from '../utils/chartLinks'
 import { cn } from '../utils/cn'
 
@@ -26,7 +26,7 @@ export function AddTradePage() {
     paperProfile?.startingCapital ??
     paperProfile?.totalDeposits ??
     paperProfile?.currentCapital ??
-    ''
+    (paperProfile?.isPaper ? DEFAULT_PAPER_PRINCIPAL : '')
 
   const [form, setForm] = useState({
     symbol: '',
@@ -58,11 +58,30 @@ export function AddTradePage() {
     return Boolean(accountProfiles.find((p) => p.id === form.account)?.isPaper)
   }, [accountProfiles, form.account])
 
+  const selectedPaperProfile = useMemo(
+    () => accountProfiles.find((p) => p.id === form.account),
+    [accountProfiles, form.account]
+  )
+
+  const paperPreview = useMemo(() => {
+    const settings = resolvePaperSettings(selectedPaperProfile?.paperSettings)
+    const principal = resolvePaperPrincipal(
+      form.accountBalance,
+      selectedPaperProfile?.startingCapital,
+      selectedPaperProfile?.totalDeposits,
+    )
+    return computePaperSignedResult(form.pnl, form.outcome, principal, settings.riskPercent)
+  }, [
+    form.pnl,
+    form.outcome,
+    form.accountBalance,
+    selectedPaperProfile?.paperSettings,
+    selectedPaperProfile?.startingCapital,
+    selectedPaperProfile?.totalDeposits,
+  ])
+
   const previewPnl = (() => {
-    if (selectedIsPaper) {
-      if (!form.pnl || isNaN(parseFloat(form.pnl))) return null
-      return parseFloat(form.pnl)
-    }
+    if (selectedIsPaper) return paperPreview.signedPnl
     if (form.status !== 'closed' || !form.exitPrice || !form.entryPrice || !form.quantity) return null
     return calculateTradePnl(
       form.side,
@@ -74,11 +93,11 @@ export function AddTradePage() {
   })()
 
   useEffect(() => {
-    if (outcomeManual || previewPnl == null) return
+    if (selectedIsPaper || outcomeManual || previewPnl == null) return
     const inferred = previewPnl > 0 ? 'win' : previewPnl < 0 ? 'loss' : null
     if (!inferred) return
     setForm((current) => (current.outcome === inferred ? current : { ...current, outcome: inferred }))
-  }, [previewPnl, outcomeManual])
+  }, [previewPnl, outcomeManual, selectedIsPaper])
 
   const validate = () => {
     const errs: Record<string, string> = {}
@@ -86,7 +105,7 @@ export function AddTradePage() {
 
     if (selectedIsPaper) {
       if (form.pnl === '' || isNaN(parseFloat(form.pnl))) errs.pnl = '请填写盈亏金额 ($)'
-      if (form.rMultiple === '' || isNaN(parseFloat(form.rMultiple))) errs.rMultiple = '请填写盈亏 R'
+      else if (paperPreview.unitRisk <= 0) errs.rMultiple = '请先在模拟账户参数中设置本金和每笔风险 %'
     } else {
       if (!form.entryPrice || isNaN(parseFloat(form.entryPrice))) errs.entryPrice = '请输入有效入场价'
       if (!form.quantity || isNaN(parseFloat(form.quantity))) errs.quantity = '请输入有效数量'
@@ -111,9 +130,11 @@ export function AddTradePage() {
     const symbol = form.symbol.toUpperCase().trim()
     const tags = form.tags ? form.tags.split(/[,;]/).map((t) => t.trim()).filter(Boolean) : []
     const entryCharts = normalizeChartLinks(charts)
-    const rMultiple = form.rMultiple.trim() && !isNaN(parseFloat(form.rMultiple))
-      ? parseFloat(form.rMultiple)
-      : undefined
+    const rMultiple = selectedIsPaper
+      ? paperPreview.rMultiple
+      : form.rMultiple.trim() && !isNaN(parseFloat(form.rMultiple))
+        ? parseFloat(form.rMultiple)
+        : undefined
 
     let tradeId: string
     let pnl: number
@@ -123,7 +144,7 @@ export function AddTradePage() {
     let exitPrice: number | undefined
 
     if (selectedIsPaper) {
-      pnl = parseFloat(form.pnl)
+      pnl = paperPreview.signedPnl ?? 0
       const maxRr = form.maxRr.trim() ? parseFloat(form.maxRr) : undefined
       const stopLoss = form.stopLoss.trim() ? parseFloat(form.stopLoss) : undefined
       const balance = form.accountBalance.trim() ? parseFloat(form.accountBalance) : undefined
@@ -224,7 +245,7 @@ export function AddTradePage() {
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {selectedIsPaper
-            ? '和 Playbook 新建案例同一套：盈亏 $、赚了几 R、Max R、止损。EVC 有图会同时写入案例。'
+            ? '和 Playbook 新建案例同一套：填金额，正负由案例类型决定，R 按账户本金和风险%自动计算。EVC 有图会同时写入案例。'
             : '手动添加一笔交易。EVC 图表填了任意一项，会同时写入 Playbook。'}
         </p>
       </div>
@@ -256,7 +277,16 @@ export function AddTradePage() {
             <FormField label="账户">
               <select
                 value={form.account}
-                onChange={(e) => setForm({ ...form, account: e.target.value })}
+                onChange={(e) => {
+                  const nextId = e.target.value
+                  const profile = accountProfiles.find((p) => p.id === nextId)
+                  const balance = profile?.startingCapital ?? profile?.totalDeposits ?? profile?.currentCapital
+                  setForm({
+                    ...form,
+                    account: nextId,
+                    accountBalance: balance != null ? String(balance) : '',
+                  })
+                }}
                 className="form-input"
               >
                 {accounts.map((id) => {
@@ -291,7 +321,7 @@ export function AddTradePage() {
 
             <FormField
               label="案例类型"
-              hint="写入 Playbook 时用。先按盈亏金额自动判断，也可以手选"
+              hint="写入 Playbook 时用。Paper 账户按这里判断盈亏正负，金额只需填绝对值"
               className="sm:col-span-2"
             >
               <div className="grid grid-cols-2 gap-2">
@@ -299,7 +329,11 @@ export function AddTradePage() {
                   type="button"
                   onClick={() => {
                     setOutcomeManual(true)
-                    setForm({ ...form, outcome: 'win' })
+                    setForm({
+                      ...form,
+                      outcome: 'win',
+                      pnl: form.pnl.trim() === '' || isNaN(parseFloat(form.pnl)) ? form.pnl : String(Math.abs(parseFloat(form.pnl))),
+                    })
                   }}
                   className={cn(
                     'flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors',
@@ -315,7 +349,11 @@ export function AddTradePage() {
                   type="button"
                   onClick={() => {
                     setOutcomeManual(true)
-                    setForm({ ...form, outcome: 'loss' })
+                    setForm({
+                      ...form,
+                      outcome: 'loss',
+                      pnl: form.pnl.trim() === '' || isNaN(parseFloat(form.pnl)) ? form.pnl : String(Math.abs(parseFloat(form.pnl))),
+                    })
                   }}
                   className={cn(
                     'flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors',
@@ -364,25 +402,29 @@ export function AddTradePage() {
           <section className="rounded-xl border border-violet-200 dark:border-violet-900/50 bg-white dark:bg-surface-900 p-6 shadow-sm">
             <h2 className="mb-4 text-sm font-semibold text-violet-800 dark:text-violet-200">Paper 交易结果</h2>
             <div className="grid gap-4 sm:grid-cols-2">
-              <FormField label="盈亏金额 $ *" error={errors.pnl}>
+              <FormField label="盈亏金额 $ *" hint="只需填金额，正负由上方案例类型决定" error={errors.pnl}>
                 <input
                   type="number"
+                  min="0"
                   step="0.01"
                   value={form.pnl}
                   onChange={(e) => setForm({ ...form, pnl: e.target.value })}
-                  placeholder="例如 250 或 -120"
+                  placeholder="例如 400"
                   className="form-input"
                 />
               </FormField>
-              <FormField label="赚了几 R *" hint="盈利填正数，亏损填负数，例如 +2.0 或 -1" error={errors.rMultiple}>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={form.rMultiple}
-                  onChange={(e) => setForm({ ...form, rMultiple: e.target.value })}
-                  placeholder="例如 2.0 或 -1"
-                  className="form-input"
-                />
+              <FormField
+                label="赚了几 R"
+                hint={
+                  paperPreview.unitRisk > 0
+                    ? `自动计算 · 1R = ${formatCurrency(paperPreview.unitRisk)}`
+                    : '请先在模拟账户参数中设置本金和每笔风险 %'
+                }
+                error={errors.rMultiple}
+              >
+                <div className="form-input flex items-center bg-slate-50 font-semibold text-slate-700 dark:bg-surface-800 dark:text-slate-200">
+                  {paperPreview.rMultiple != null ? formatRMultiple(paperPreview.rMultiple) : '—'}
+                </div>
               </FormField>
               <FormField label="最高收益 Max R">
                 <input
@@ -404,7 +446,7 @@ export function AddTradePage() {
                   className="form-input"
                 />
               </FormField>
-              <FormField label="账户总金额设定" hint="写入该 Paper 账户本金" className="sm:col-span-2">
+              <FormField label="账户总金额设定" hint="写入该 Paper 账户本金；改了会重算 R" className="sm:col-span-2">
                 <input
                   type="number"
                   step="0.01"
@@ -426,9 +468,7 @@ export function AddTradePage() {
                 )}
               >
                 记录盈亏: {formatCurrency(previewPnl)}
-                {form.rMultiple && !isNaN(parseFloat(form.rMultiple))
-                  ? ` · ${parseFloat(form.rMultiple) >= 0 ? '+' : ''}${parseFloat(form.rMultiple).toFixed(2)}R`
-                  : ''}
+                {paperPreview.rMultiple != null ? ` · ${formatRMultiple(paperPreview.rMultiple)}` : ''}
               </div>
             )}
           </section>

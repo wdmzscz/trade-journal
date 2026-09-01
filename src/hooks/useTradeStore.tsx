@@ -484,6 +484,14 @@ export function TradeStoreProvider({
           type,
           isPaper: isPaper,
           createdAt: now,
+          ...(isPaper
+            ? {
+                startingCapital: 50000,
+                totalDeposits: 50000,
+                currentCapital: 50000,
+                paperSettings: resolvePaperSettings(),
+              }
+            : {}),
         }
       }
 

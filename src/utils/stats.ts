@@ -21,6 +21,7 @@ import type {
   CalendarWeekRow,
   PerformanceScore,
   PaperAccountSettings,
+  PlaybookOutcome,
 } from '../types'
 import { BREAKEVEN_PNL_THRESHOLD } from '../types'
 
@@ -35,6 +36,47 @@ export function formatQuantity(quantity: number): string {
 
 export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`
+}
+
+export function formatRMultiple(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}R`
+}
+
+/** 1R 对应的美元：本金 × 每笔风险% */
+export function paperUnitRiskDollars(principal: number, riskPercent: number): number {
+  if (!(principal > 0) || !(riskPercent > 0)) return 0
+  return principal * (riskPercent / 100)
+}
+
+/** 按案例类型给金额加正负；输入只取绝对值，用户不必填 + / - */
+export function signedPnlFromOutcome(amount: number, outcome: PlaybookOutcome): number {
+  const abs = Math.abs(amount)
+  if (outcome === 'loss') return -abs
+  if (outcome === 'win') return abs
+  return 0
+}
+
+export function rMultipleFromPnl(pnl: number, unitRiskDollars: number): number | undefined {
+  if (!(unitRiskDollars > 0) || !Number.isFinite(pnl)) return undefined
+  return Math.round((pnl / unitRiskDollars) * 100) / 100
+}
+
+export function computePaperSignedResult(
+  amountRaw: string,
+  outcome: PlaybookOutcome,
+  principal: number,
+  riskPercent: number,
+): { signedPnl: number | null; rMultiple: number | undefined; unitRisk: number } {
+  const unitRisk = paperUnitRiskDollars(principal, riskPercent)
+  if (amountRaw.trim() === '' || Number.isNaN(Number(amountRaw))) {
+    return { signedPnl: null, rMultiple: undefined, unitRisk }
+  }
+  const signedPnl = signedPnlFromOutcome(Number(amountRaw), outcome)
+  return {
+    signedPnl,
+    rMultiple: rMultipleFromPnl(signedPnl, unitRisk),
+    unitRisk,
+  }
 }
 
 /** 期初净值（IBKR Change in NAV 的 Starting Value） */
@@ -55,6 +97,31 @@ export function resolvePrincipalCapital(
   if (totalDeposits != null && totalDeposits > 0) return totalDeposits
   if (startingCapital > 0) return startingCapital
   return 0
+}
+
+/** 表单里填了本金就用表单值，否则回退到账户设定 */
+export function resolveFormPrincipal(
+  accountBalanceRaw: string,
+  startingCapital?: number | null,
+  totalDeposits?: number | null,
+): number {
+  const fromForm = Number(String(accountBalanceRaw).replace(/,/g, '').trim())
+  if (String(accountBalanceRaw).trim() !== '' && Number.isFinite(fromForm) && fromForm > 0) {
+    return fromForm
+  }
+  return resolvePrincipalCapital(startingCapital ?? 0, totalDeposits)
+}
+
+export const DEFAULT_PAPER_PRINCIPAL = 50000
+
+/** Paper 本金：表单 / 账户设定，都没有则用 50000（与模拟账户参数面板一致） */
+export function resolvePaperPrincipal(
+  accountBalanceRaw: string,
+  startingCapital?: number | null,
+  totalDeposits?: number | null,
+): number {
+  const n = resolveFormPrincipal(accountBalanceRaw, startingCapital, totalDeposits)
+  return n > 0 ? n : DEFAULT_PAPER_PRINCIPAL
 }
 
 export function computeAccountReturn(

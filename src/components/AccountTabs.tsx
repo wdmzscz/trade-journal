@@ -751,7 +751,7 @@ function ImportHint({ onClose, isPaper }: { onClose: () => void; isPaper?: boole
     return (
       <div className="mt-4 rounded-lg bg-violet-50 p-3 dark:bg-violet-950/30">
         <p className="text-xs text-violet-800 dark:text-violet-200">
-          Paper 账户可直接在「Add Trade」或「Playbook 新建案例」里填写盈亏 $、R、Max R、Stop Loss，记录会进入该账户的统计、图表与日历。
+          Paper 账户可直接在「Add Trade」或「Playbook 新建案例」里填写盈亏金额（正负由案例类型决定，R 按账户设置自动计算），记录会进入该账户的统计、图表与日历。
         </p>
       </div>
     )

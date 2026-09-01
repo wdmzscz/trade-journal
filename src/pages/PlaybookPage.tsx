@@ -12,11 +12,13 @@ import { PnlBadge } from '../components/PnlBadge'
 import type { PlaybookEntry, PlaybookOutcome, Trade } from '../types'
 import {
   PLAYBOOK_TIMEFRAMES, PLAYBOOK_SLOT_LABELS,
-  playbookOutcomeFromPnl, resolvePlaybookOutcome,
+  playbookOutcomeFromPnl, resolvePlaybookOutcome, resolvePaperSettings,
 } from '../types'
 import { countValidCharts, mergePlaybookChartSlots, validatePlaybookCharts } from '../utils/chartLinks'
-import { formatCurrency } from '../utils/stats'
-import { isLosingTrade, isWinningTrade } from '../utils/stats'
+import {
+  formatCurrency, formatRMultiple, isLosingTrade, isWinningTrade,
+  computePaperSignedResult, resolvePaperPrincipal, DEFAULT_PAPER_PRINCIPAL,
+} from '../utils/stats'
 import { cn } from '../utils/cn'
 
 const EMPTY_FORM = {
@@ -52,6 +54,11 @@ function todayLocalDate(): string {
 function toDateInputValue(value?: string): string {
   if (!value) return todayLocalDate()
   return value.slice(0, 10)
+}
+
+function absAmountString(value?: number | null): string {
+  if (value == null || Number.isNaN(Number(value))) return ''
+  return String(Math.abs(Number(value)))
 }
 
 function loadSort(): DateSort {
@@ -101,6 +108,25 @@ export function PlaybookPage() {
   const editingIsPaper = Boolean(
     editingAccountId && accountProfiles.find((p) => p.id === editingAccountId)?.isPaper
   )
+  const editingPaperProfile = editingAccountId
+    ? accountProfiles.find((p) => p.id === editingAccountId)
+    : undefined
+  const paperPreview = useMemo(() => {
+    const settings = resolvePaperSettings(editingPaperProfile?.paperSettings)
+    const principal = resolvePaperPrincipal(
+      form.accountBalance,
+      editingPaperProfile?.startingCapital,
+      editingPaperProfile?.totalDeposits,
+    )
+    return computePaperSignedResult(form.pnl, form.outcome, principal, settings.riskPercent)
+  }, [
+    form.pnl,
+    form.outcome,
+    form.accountBalance,
+    editingPaperProfile?.paperSettings,
+    editingPaperProfile?.startingCapital,
+    editingPaperProfile?.totalDeposits,
+  ])
 
   const closedCandidates = useMemo(
     () => filteredTrades
@@ -177,8 +203,14 @@ export function PlaybookPage() {
     const today = todayLocalDate()
     const account = selectedAccount !== 'all' ? selectedAccount : ''
     const profile = account ? accountProfiles.find((p) => p.id === account) : undefined
-    const balance =
+    const storedBalance =
       profile?.startingCapital ?? profile?.totalDeposits ?? profile?.currentCapital
+    const balance =
+      storedBalance != null && Number(storedBalance) > 0
+        ? storedBalance
+        : profile?.isPaper
+          ? DEFAULT_PAPER_PRINCIPAL
+          : storedBalance
     setEditing({
       id: '',
       symbol: '',
@@ -209,8 +241,14 @@ export function PlaybookPage() {
     const account = entry.account.trim() || linkedTrade?.account || (selectedAccount !== 'all' ? selectedAccount : '')
     const outcome = resolvePlaybookOutcome(entry) ?? 'win'
     const profile = account ? accountProfiles.find((p) => p.id === account) : undefined
-    const balance =
+    const storedBalance =
       profile?.startingCapital ?? profile?.totalDeposits ?? profile?.currentCapital
+    const balance =
+      storedBalance != null && Number(storedBalance) > 0
+        ? storedBalance
+        : profile?.isPaper
+          ? DEFAULT_PAPER_PRINCIPAL
+          : storedBalance
     setEditing({ ...entry, account, outcome })
     setForm({
       title: entry.title,
@@ -221,7 +259,7 @@ export function PlaybookPage() {
       setup: entry.setup ?? '',
       tags: entry.tags.join(', '),
       outcome,
-      pnl: entry.pnl != null ? String(entry.pnl) : linkedTrade?.pnl != null ? String(linkedTrade.pnl) : '',
+      pnl: absAmountString(entry.pnl ?? linkedTrade?.pnl),
       rMultiple: linkedTrade?.rMultiple != null ? String(linkedTrade.rMultiple) : '',
       maxRr: linkedTrade?.maxRr != null ? String(linkedTrade.maxRr) : '',
       stopLoss: linkedTrade?.stopLoss != null ? String(linkedTrade.stopLoss) : '',
@@ -263,7 +301,7 @@ export function PlaybookPage() {
       title: `${trade.symbol} ${trade.setup ?? caseLabel}`,
       thesis: trade.notes ?? '',
       outcome: outcome === 'breakeven' ? 'win' : outcome,
-      pnl: String(trade.pnl),
+      pnl: absAmountString(trade.pnl),
       rMultiple: trade.rMultiple != null ? String(trade.rMultiple) : '',
       maxRr: trade.maxRr != null ? String(trade.maxRr) : '',
       stopLoss: trade.stopLoss != null ? String(trade.stopLoss) : '',
@@ -311,16 +349,24 @@ export function PlaybookPage() {
     let paperMaxRr: number | undefined
     let paperStopLoss: number | undefined
 
-    if (isPaper && !editing.tradeId) {
-      if (form.pnl === '' || Number.isNaN(Number(form.pnl))) {
-        errors.push('模拟账户请填写盈亏金额 ($)，保存后会计入交易统计')
+    const applyPaperResult = (requirePnl: boolean) => {
+      const hasPnl = form.pnl.trim() !== '' && !Number.isNaN(Number(form.pnl))
+      if (!hasPnl) {
+        if (requirePnl) errors.push('模拟账户请填写盈亏金额 ($)，保存后会计入交易统计')
       } else {
-        paperPnl = Number(form.pnl)
-      }
-      if (form.rMultiple.trim() === '' || Number.isNaN(Number(form.rMultiple))) {
-        errors.push('请填写赚了几 R（盈利填正数，亏损填负数）')
-      } else {
-        paperR = Number(form.rMultiple)
+        const profile = accountProfiles.find((p) => p.id === account)
+        const settings = resolvePaperSettings(profile?.paperSettings)
+        const principal = resolvePaperPrincipal(
+          form.accountBalance,
+          profile?.startingCapital,
+          profile?.totalDeposits,
+        )
+        const result = computePaperSignedResult(form.pnl, form.outcome, principal, settings.riskPercent)
+        paperPnl = result.signedPnl ?? undefined
+        paperR = result.rMultiple
+        if (result.unitRisk <= 0) {
+          errors.push('无法自动计算 R：请先在模拟账户参数中设置本金和每笔风险 %')
+        }
       }
       if (form.maxRr.trim() && !Number.isNaN(Number(form.maxRr))) {
         paperMaxRr = Number(form.maxRr)
@@ -328,11 +374,12 @@ export function PlaybookPage() {
       if (form.stopLoss.trim() && !Number.isNaN(Number(form.stopLoss))) {
         paperStopLoss = Number(form.stopLoss)
       }
+    }
+
+    if (isPaper && !editing.tradeId) {
+      applyPaperResult(true)
     } else if (isPaper && editing.tradeId) {
-      if (form.pnl !== '' && !Number.isNaN(Number(form.pnl))) paperPnl = Number(form.pnl)
-      if (form.rMultiple.trim() && !Number.isNaN(Number(form.rMultiple))) paperR = Number(form.rMultiple)
-      if (form.maxRr.trim() && !Number.isNaN(Number(form.maxRr))) paperMaxRr = Number(form.maxRr)
-      if (form.stopLoss.trim() && !Number.isNaN(Number(form.stopLoss))) paperStopLoss = Number(form.stopLoss)
+      applyPaperResult(false)
     }
 
     if (errors.length > 0) {
@@ -452,7 +499,7 @@ export function PlaybookPage() {
             <h1 className="page-title">Playbook</h1>
           </div>
           <p className="page-subtitle mt-1">
-            收藏盈利与亏损模板。Paper 账户新建案例会同时记一笔交易（盈亏 $、赚了几 R、EVC）。
+            收藏盈利与亏损模板。Paper 账户新建案例会同时记一笔交易（盈亏 $ 按案例类型记正负，R 按账户设置自动计算）。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -667,11 +714,15 @@ export function PlaybookPage() {
             )}
 
             <div className="space-y-4">
-              <Field label="案例类型" hint="盈利图鉴或亏损复盘" required>
+              <Field label="案例类型" hint="选择后只需填金额，正负会自动带上" required>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setForm((f) => ({ ...f, outcome: 'win' }))}
+                    onClick={() => setForm((f) => ({
+                      ...f,
+                      outcome: 'win',
+                      pnl: f.pnl.trim() === '' || Number.isNaN(Number(f.pnl)) ? f.pnl : String(Math.abs(Number(f.pnl))),
+                    }))}
                     className={cn(
                       'flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors',
                       form.outcome === 'win'
@@ -684,7 +735,11 @@ export function PlaybookPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setForm((f) => ({ ...f, outcome: 'loss' }))}
+                    onClick={() => setForm((f) => ({
+                      ...f,
+                      outcome: 'loss',
+                      pnl: f.pnl.trim() === '' || Number.isNaN(Number(f.pnl)) ? f.pnl : String(Math.abs(Number(f.pnl))),
+                    }))}
                     className={cn(
                       'flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors',
                       form.outcome === 'loss'
@@ -722,28 +777,31 @@ export function PlaybookPage() {
                     模拟交易记录
                   </p>
                   <p className="mb-3 text-xs text-violet-700/90 dark:text-violet-300/80">
-                    填写盈亏 $ 和赚了几 R 后保存，会自动生成一笔交易并进入 Dashboard / 日历 / 图表统计。和 Add Trade 同一套字段。
+                    填写金额即可：正负由上方案例类型决定，R 按本金 × 每笔风险%自动计算。保存后会生成一笔交易并进入 Dashboard / 日历 / 图表。
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="盈亏金额 $" required>
+                    <Field label="盈亏金额 $" hint="只需填金额，不用加 + / -" required>
                       <input
                         type="number"
+                        min="0"
                         step="0.01"
                         value={form.pnl}
                         onChange={(e) => setForm((f) => ({ ...f, pnl: e.target.value }))}
-                        placeholder="250 或 -120"
+                        placeholder="例如 400"
                         className="form-input"
                       />
                     </Field>
-                    <Field label="赚了几 R" hint="盈利填正数，亏损填负数" required>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={form.rMultiple}
-                        onChange={(e) => setForm((f) => ({ ...f, rMultiple: e.target.value }))}
-                        placeholder="2.0 或 -1"
-                        className="form-input"
-                      />
+                    <Field
+                      label="赚了几 R"
+                      hint={
+                        paperPreview.unitRisk > 0
+                          ? `自动计算 · 1R = ${formatCurrency(paperPreview.unitRisk)}`
+                          : '请先在模拟账户参数中设置本金和每笔风险 %'
+                      }
+                    >
+                      <div className="form-input flex items-center bg-slate-50 font-semibold text-slate-700 dark:bg-surface-800 dark:text-slate-200">
+                        {paperPreview.rMultiple != null ? formatRMultiple(paperPreview.rMultiple) : '—'}
+                      </div>
                     </Field>
                     <Field label="最高收益 Max R">
                       <input
@@ -765,7 +823,7 @@ export function PlaybookPage() {
                         className="form-input"
                       />
                     </Field>
-                    <Field label="账户总金额设定" hint="写入该模拟账户本金">
+                    <Field label="账户总金额设定" hint="写入该模拟账户本金；改了会重算 R">
                       <input
                         type="number"
                         step="0.01"
@@ -776,19 +834,17 @@ export function PlaybookPage() {
                       />
                     </Field>
                   </div>
-                  {form.pnl !== '' && !Number.isNaN(Number(form.pnl)) && (
+                  {paperPreview.signedPnl != null && (
                     <div
                       className={cn(
                         'mt-3 rounded-lg p-3 text-center text-sm font-semibold',
-                        Number(form.pnl) >= 0
+                        paperPreview.signedPnl >= 0
                           ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
                           : 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
                       )}
                     >
-                      记录盈亏: {formatCurrency(Number(form.pnl))}
-                      {form.rMultiple.trim() && !Number.isNaN(Number(form.rMultiple))
-                        ? ` · ${Number(form.rMultiple) >= 0 ? '+' : ''}${Number(form.rMultiple).toFixed(2)}R`
-                        : ''}
+                      记录盈亏: {formatCurrency(paperPreview.signedPnl)}
+                      {paperPreview.rMultiple != null ? ` · ${formatRMultiple(paperPreview.rMultiple)}` : ''}
                     </div>
                   )}
                 </div>
@@ -957,7 +1013,7 @@ function PlaybookCard({
               )}
               {rMultiple != null && Number.isFinite(rMultiple) && (
                 <span className="ml-1 font-medium text-slate-600 dark:text-slate-300">
-                  · {rMultiple >= 0 ? '+' : ''}{rMultiple.toFixed(2)}R
+                  · {formatRMultiple(rMultiple)}
                 </span>
               )}
             </p>
