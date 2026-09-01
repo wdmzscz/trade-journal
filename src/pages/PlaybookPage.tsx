@@ -17,7 +17,7 @@ import {
 import { countValidCharts, mergePlaybookChartSlots, validatePlaybookCharts } from '../utils/chartLinks'
 import {
   formatCurrency, formatRMultiple, isLosingTrade, isWinningTrade,
-  computePaperSignedResult, resolvePaperPrincipal, DEFAULT_PAPER_PRINCIPAL,
+  computePaperSignedResult, resolvePaperPrincipal,
 } from '../utils/stats'
 import { cn } from '../utils/cn'
 
@@ -33,8 +33,6 @@ const EMPTY_FORM = {
   pnl: '',
   rMultiple: '',
   maxRr: '',
-  stopLoss: '',
-  accountBalance: '',
 }
 
 type DateSort = 'newest' | 'oldest'
@@ -85,13 +83,11 @@ export function PlaybookPage() {
     filteredTrades,
     selectedAccount,
     accountProfiles,
-    accountInfos,
     savePlaybookEntry,
     deletePlaybookEntry,
     togglePlaybookPinned,
     addTrade,
     updateTrade,
-    updateAccount,
   } = useTradeStore()
 
   const [search, setSearch] = useState('')
@@ -114,7 +110,7 @@ export function PlaybookPage() {
   const paperPreview = useMemo(() => {
     const settings = resolvePaperSettings(editingPaperProfile?.paperSettings)
     const principal = resolvePaperPrincipal(
-      form.accountBalance,
+      '',
       editingPaperProfile?.startingCapital,
       editingPaperProfile?.totalDeposits,
     )
@@ -122,7 +118,6 @@ export function PlaybookPage() {
   }, [
     form.pnl,
     form.outcome,
-    form.accountBalance,
     editingPaperProfile?.paperSettings,
     editingPaperProfile?.startingCapital,
     editingPaperProfile?.totalDeposits,
@@ -202,15 +197,6 @@ export function PlaybookPage() {
     setSaveError(null)
     const today = todayLocalDate()
     const account = selectedAccount !== 'all' ? selectedAccount : ''
-    const profile = account ? accountProfiles.find((p) => p.id === account) : undefined
-    const storedBalance =
-      profile?.startingCapital ?? profile?.totalDeposits ?? profile?.currentCapital
-    const balance =
-      storedBalance != null && Number(storedBalance) > 0
-        ? storedBalance
-        : profile?.isPaper
-          ? DEFAULT_PAPER_PRINCIPAL
-          : storedBalance
     setEditing({
       id: '',
       symbol: '',
@@ -230,7 +216,6 @@ export function PlaybookPage() {
       ...EMPTY_FORM,
       entryDate: today,
       outcome: 'win',
-      accountBalance: balance != null ? String(balance) : '',
     })
     setCharts(mergePlaybookChartSlots())
   }
@@ -240,15 +225,6 @@ export function PlaybookPage() {
     const linkedTrade = entry.tradeId ? filteredTrades.find((t) => t.id === entry.tradeId) : undefined
     const account = entry.account.trim() || linkedTrade?.account || (selectedAccount !== 'all' ? selectedAccount : '')
     const outcome = resolvePlaybookOutcome(entry) ?? 'win'
-    const profile = account ? accountProfiles.find((p) => p.id === account) : undefined
-    const storedBalance =
-      profile?.startingCapital ?? profile?.totalDeposits ?? profile?.currentCapital
-    const balance =
-      storedBalance != null && Number(storedBalance) > 0
-        ? storedBalance
-        : profile?.isPaper
-          ? DEFAULT_PAPER_PRINCIPAL
-          : storedBalance
     setEditing({ ...entry, account, outcome })
     setForm({
       title: entry.title,
@@ -262,8 +238,6 @@ export function PlaybookPage() {
       pnl: absAmountString(entry.pnl ?? linkedTrade?.pnl),
       rMultiple: linkedTrade?.rMultiple != null ? String(linkedTrade.rMultiple) : '',
       maxRr: linkedTrade?.maxRr != null ? String(linkedTrade.maxRr) : '',
-      stopLoss: linkedTrade?.stopLoss != null ? String(linkedTrade.stopLoss) : '',
-      accountBalance: balance != null ? String(balance) : '',
     })
     setCharts(mergePlaybookChartSlots(entry.charts))
   }
@@ -304,7 +278,6 @@ export function PlaybookPage() {
       pnl: absAmountString(trade.pnl),
       rMultiple: trade.rMultiple != null ? String(trade.rMultiple) : '',
       maxRr: trade.maxRr != null ? String(trade.maxRr) : '',
-      stopLoss: trade.stopLoss != null ? String(trade.stopLoss) : '',
     })
     setCharts(mergePlaybookChartSlots(trade.entryCharts))
   }
@@ -357,22 +330,20 @@ export function PlaybookPage() {
         const profile = accountProfiles.find((p) => p.id === account)
         const settings = resolvePaperSettings(profile?.paperSettings)
         const principal = resolvePaperPrincipal(
-          form.accountBalance,
+          '',
           profile?.startingCapital,
           profile?.totalDeposits,
         )
         const result = computePaperSignedResult(form.pnl, form.outcome, principal, settings.riskPercent)
         paperPnl = result.signedPnl ?? undefined
         paperR = result.rMultiple
+        if (result.unitRisk > 0) paperStopLoss = result.unitRisk
         if (result.unitRisk <= 0) {
           errors.push('无法自动计算 R：请先在模拟账户参数中设置本金和每笔风险 %')
         }
       }
       if (form.maxRr.trim() && !Number.isNaN(Number(form.maxRr))) {
         paperMaxRr = Number(form.maxRr)
-      }
-      if (form.stopLoss.trim() && !Number.isNaN(Number(form.stopLoss))) {
-        paperStopLoss = Number(form.stopLoss)
       }
     }
 
@@ -430,23 +401,6 @@ export function PlaybookPage() {
           setup: form.setup.trim() || undefined,
           notes: form.thesis.trim() || undefined,
           entryCharts: validCharts,
-        })
-      }
-
-      const balance = form.accountBalance.trim() ? Number(form.accountBalance) : undefined
-      if (balance != null && !Number.isNaN(balance) && balance > 0) {
-        const priorPnl = accountInfos.find((a) => a.id === account)?.totalPnl ?? 0
-        const delta =
-          paperPnl != null && !editing.tradeId
-            ? paperPnl
-            : paperPnl != null && linkedTrade
-              ? paperPnl - linkedTrade.pnl
-              : 0
-        updateAccount(account, {
-          isPaper: true,
-          startingCapital: balance,
-          totalDeposits: balance,
-          currentCapital: balance + priorPnl + delta,
         })
       }
     } else if (tradeId) {
@@ -777,7 +731,7 @@ export function PlaybookPage() {
                     模拟交易记录
                   </p>
                   <p className="mb-3 text-xs text-violet-700/90 dark:text-violet-300/80">
-                    填写金额即可：正负由上方案例类型决定，R 按本金 × 每笔风险%自动计算。保存后会生成一笔交易并进入 Dashboard / 日历 / 图表。
+                    填写金额即可：正负由上方案例类型决定，R 和止损按顶部「模拟账户参数」自动计算。保存后会生成一笔交易并进入 Dashboard / 日历 / 图表。
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="盈亏金额 $" hint="只需填金额，不用加 + / -" required>
@@ -795,8 +749,8 @@ export function PlaybookPage() {
                       label="赚了几 R"
                       hint={
                         paperPreview.unitRisk > 0
-                          ? `自动计算 · 1R = ${formatCurrency(paperPreview.unitRisk)}`
-                          : '请先在模拟账户参数中设置本金和每笔风险 %'
+                          ? `自动计算 · 1R / 止损 = ${formatCurrency(paperPreview.unitRisk)}`
+                          : '请先在顶部模拟账户参数中设置本金和每笔风险 %'
                       }
                     >
                       <div className="form-input flex items-center bg-slate-50 font-semibold text-slate-700 dark:bg-surface-800 dark:text-slate-200">
@@ -810,26 +764,6 @@ export function PlaybookPage() {
                         value={form.maxRr}
                         onChange={(e) => setForm((f) => ({ ...f, maxRr: e.target.value }))}
                         placeholder="2.8"
-                        className="form-input"
-                      />
-                    </Field>
-                    <Field label="止损金额 ($)">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={form.stopLoss}
-                        onChange={(e) => setForm((f) => ({ ...f, stopLoss: e.target.value }))}
-                        placeholder="500"
-                        className="form-input"
-                      />
-                    </Field>
-                    <Field label="账户总金额设定" hint="写入该模拟账户本金；改了会重算 R">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={form.accountBalance}
-                        onChange={(e) => setForm((f) => ({ ...f, accountBalance: e.target.value }))}
-                        placeholder="50000"
                         className="form-input"
                       />
                     </Field>
