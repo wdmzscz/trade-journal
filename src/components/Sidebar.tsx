@@ -12,6 +12,7 @@ import {
   BookMarked,
   FlaskConical,
   Sparkles,
+  ScanSearch,
 } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { StorageInfo } from './StorageInfo'
@@ -21,6 +22,7 @@ import { isCloudEnabled } from '../lib/supabase'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/screener', label: 'Screener', icon: ScanSearch },
   { to: '/trades', label: 'Trades', icon: List },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/playbook', label: 'Playbook', icon: BookMarked },

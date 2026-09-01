@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { Menu, X, TrendingUp } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { AccountTabs } from './AccountTabs'
@@ -10,6 +10,8 @@ import { useTradeStore } from '../hooks/useTradeStore'
 
 export function Layout() {
   const { selectedAccount } = useTradeStore()
+  const { pathname } = useLocation()
+  const isScreener = pathname === '/screener'
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
@@ -63,11 +65,17 @@ export function Layout() {
         </header>
 
         <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-3 py-4 sm:px-5 sm:py-5 lg:px-8 lg:py-8 pb-nav-safe">
-          <AccountTabs />
-          <div className="flex flex-1 flex-col gap-4 pt-4 sm:gap-5 sm:pt-6">
-            <PaperAccountConfigPanel />
-            <Outlet key={selectedAccount} />
-          </div>
+          {isScreener ? (
+            <Outlet />
+          ) : (
+            <>
+              <AccountTabs />
+              <div className="flex flex-1 flex-col gap-4 pt-4 sm:gap-5 sm:pt-6">
+                <PaperAccountConfigPanel />
+                <Outlet key={selectedAccount} />
+              </div>
+            </>
+          )}
         </div>
 
         <MobileNav />

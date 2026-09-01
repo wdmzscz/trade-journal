@@ -1,13 +1,13 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, List, CalendarDays, BookMarked, Upload } from 'lucide-react'
+import { LayoutDashboard, List, CalendarDays, BookMarked, ScanSearch } from 'lucide-react'
 import { cn } from '../utils/cn'
 
 const items = [
   { to: '/', label: '首页', icon: LayoutDashboard, end: true },
   { to: '/trades', label: '交易', icon: List },
+  { to: '/screener', label: '选股', icon: ScanSearch },
   { to: '/calendar', label: '日历', icon: CalendarDays },
   { to: '/playbook', label: '案例', icon: BookMarked },
-  { to: '/import', label: '导入', icon: Upload },
 ]
 
 export function MobileNav() {
