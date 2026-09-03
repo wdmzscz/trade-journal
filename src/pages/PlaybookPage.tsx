@@ -79,10 +79,12 @@ function loadOutcomeFilter(): OutcomeFilter {
 
 export function PlaybookPage() {
   const {
+    playbook,
     filteredPlaybook,
     filteredTrades,
     selectedAccount,
     accountProfiles,
+    setSelectedAccount,
     savePlaybookEntry,
     deletePlaybookEntry,
     togglePlaybookPinned,
@@ -122,6 +124,19 @@ export function PlaybookPage() {
     editingPaperProfile?.startingCapital,
     editingPaperProfile?.totalDeposits,
   ])
+
+  const paperPlaybookAccounts = useMemo(() => {
+    const paperIds = new Set(accountProfiles.filter((p) => p.isPaper).map((p) => p.id))
+    const counts = new Map<string, number>()
+    for (const entry of playbook) {
+      if (!paperIds.has(entry.account)) continue
+      counts.set(entry.account, (counts.get(entry.account) ?? 0) + 1)
+    }
+    return accountProfiles
+      .filter((p) => (counts.get(p.id) ?? 0) > 0)
+      .map((p) => ({ id: p.id, label: p.label, count: counts.get(p.id) ?? 0 }))
+  }, [accountProfiles, playbook])
+  const hiddenPaperPlaybook = paperPlaybookAccounts.reduce((sum, item) => sum + item.count, 0)
 
   const closedCandidates = useMemo(
     () => filteredTrades
@@ -455,6 +470,24 @@ export function PlaybookPage() {
           <p className="page-subtitle mt-1">
             收藏盈利与亏损模板。Paper 账户新建案例会同时记一笔交易（盈亏 $ 按案例类型记正负，R 按账户设置自动计算）。
           </p>
+          {selectedAccount === 'all' && hiddenPaperPlaybook > 0 && (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+              「全部账户」不显示 Paper 案例（另有 {hiddenPaperPlaybook} 条）。
+              {paperPlaybookAccounts.map((account, index) => (
+                <span key={account.id}>
+                  {index === 0 ? '请切换到 ' : '、'}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAccount(account.id)}
+                    className="font-semibold underline underline-offset-2 hover:text-amber-800"
+                  >
+                    {account.label}
+                  </button>
+                </span>
+              ))}
+              。
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <button
