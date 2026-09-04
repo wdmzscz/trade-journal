@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar'
 import { AccountTabs } from './AccountTabs'
 import { PaperAccountConfigPanel } from './PaperAccountConfigPanel'
 import { MobileNav } from './MobileNav'
+import { PullToRefresh } from './PullToRefresh'
 import { ThemeToggle } from './ThemeToggle'
 import { useTradeStore } from '../hooks/useTradeStore'
 
@@ -44,7 +45,7 @@ export function Layout() {
         </div>
       )}
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-auto">
+      <PullToRefresh className="flex min-w-0 flex-1 flex-col overflow-auto">
         {/* Mobile top bar */}
         <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur-md pt-safe dark:border-surface-800 dark:bg-surface-950/95 lg:hidden">
           <button
@@ -79,7 +80,7 @@ export function Layout() {
         </div>
 
         <MobileNav />
-      </main>
+      </PullToRefresh>
     </div>
   )
 }

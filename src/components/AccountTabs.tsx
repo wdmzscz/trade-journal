@@ -1,4 +1,5 @@
 import { forwardRef, useMemo, useState, type CSSProperties } from 'react'
+import { useCoarsePointer } from '../hooks/useCoarsePointer'
 import { Link } from 'react-router-dom'
 import {
   DndContext,
@@ -18,7 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   Plus, X, LayoutGrid, TrendingUp, LineChart, Wallet, Upload,
-  Pencil, Trash2, Settings2, FlaskConical,
+  Pencil, Trash2, Settings2, FlaskConical, ChevronUp, ChevronDown,
 } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { cn } from '../utils/cn'
@@ -40,10 +41,15 @@ export function AccountTabs() {
   } = useTradeStore()
 
   const [modal, setModal] = useState<ModalMode>(null)
+  const isMobile = useCoarsePointer()
   const sortable = accountInfos.length > 1
   const accountIds = useMemo(() => accountInfos.map((account) => account.id), [accountInfos])
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+    useSensor(PointerSensor, {
+      activationConstraint: isMobile
+        ? { delay: 400, tolerance: 8 }
+        : { distance: 12 },
+    })
   )
   const [editingAccount, setEditingAccount] = useState<AccountInfo | null>(null)
   const [formId, setFormId] = useState('')
@@ -169,7 +175,7 @@ export function AccountTabs() {
           modifiers={[restrictToHorizontalAxis]}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex items-end gap-1 overflow-x-auto pb-0 pt-3 scrollbar-thin">
+          <div className="flex items-end gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-0 pt-3 scrollbar-thin [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
             <TabButton
               active={selectedAccount === 'all'}
               onClick={() => setSelectedAccount('all')}
@@ -426,8 +432,13 @@ export function AccountTabs() {
       {/* 账户管理列表 */}
       {modal === 'manage' && (
         <AccountModal title="账户管理" onClose={closeModal}>
+          {accountInfos.length > 1 && (
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+              手机上左右滑查看账户；长按标签可拖动排序，也可在这里用箭头调整。
+            </p>
+          )}
           <div className="space-y-2">
-            {accountInfos.map((account) => {
+            {accountInfos.map((account, index) => {
               const meta = TYPE_META[account.type]
               const Icon = account.isPaper ? FlaskConical : meta.icon
               const journalCount = journal.filter((j) => j.account === account.id).length
@@ -436,6 +447,28 @@ export function AccountTabs() {
                   key={account.id}
                   className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-surface-700 p-3 hover:bg-slate-50 dark:hover:bg-surface-800 dark:bg-surface-800"
                 >
+                  {accountInfos.length > 1 && (
+                    <div className="flex shrink-0 flex-col">
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={() => setAccountsOrder(arrayMove(accountIds, index, index - 1))}
+                        className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 dark:hover:bg-surface-700 dark:hover:text-slate-200"
+                        title="上移"
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === accountInfos.length - 1}
+                        onClick={() => setAccountsOrder(arrayMove(accountIds, index, index + 1))}
+                        className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 dark:hover:bg-surface-700 dark:hover:text-slate-200"
+                        title="下移"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                   <div className={cn('rounded-lg bg-slate-100 dark:bg-surface-800 p-2', account.isPaper ? 'text-violet-600 dark:text-violet-400' : meta.color)}>
                     <Icon className="h-4 w-4" />
                   </div>
@@ -584,9 +617,9 @@ const TabButton = forwardRef<HTMLButtonElement, TabButtonProps>(function TabButt
       onClick={onClick}
       title={title}
       className={cn(
-        'group relative flex min-w-[108px] max-w-[160px] shrink-0 flex-col rounded-t-xl border px-3 py-2 sm:min-w-[140px] sm:max-w-[200px] sm:px-4 sm:py-2.5 text-left touch-none',
+        'group relative flex min-w-[108px] max-w-[160px] shrink-0 flex-col rounded-t-xl border px-3 py-2 sm:min-w-[140px] sm:max-w-[200px] sm:px-4 sm:py-2.5 text-left',
         sortable && 'cursor-grab active:cursor-grabbing',
-        isDragging && 'z-30 cursor-grabbing shadow-lg',
+        isDragging ? 'z-30 cursor-grabbing shadow-lg touch-none' : '[touch-action:pan-x]',
         active
           ? 'z-10 border-slate-200 border-b-white bg-white shadow-[0_-1px_3px_rgba(0,0,0,0.04)] dark:border-surface-700 dark:border-b-surface-950 dark:bg-surface-950'
           : 'border-transparent bg-white/40 text-slate-600 hover:bg-white/70 dark:bg-surface-800/40 dark:text-slate-400 dark:hover:bg-surface-800/70'
