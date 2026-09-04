@@ -67,7 +67,24 @@ export interface AccountInfo {
   type: AccountType
   isPaper?: boolean
   tradeCount: number
+  /** 账户展示盈亏。Paper = 案例/交易合计；实盘 = 券商净资产 − 入金（没有净资产时才回退交易合计）。 */
   totalPnl: number
+  /** Paper 本金，或实盘累计入金。 */
+  principalCapital: number
+  startingCapital?: number
+  currentCapital?: number
+  totalDeposits?: number
+}
+
+/** 当前选中范围（单个账户或全部实盘）的展示数字，UI 只读不重算 */
+export interface AccountScope {
+  id: string
+  label: string
+  isAll: boolean
+  isPaper: boolean
+  tradeCount: number
+  totalPnl: number
+  principalCapital: number
   startingCapital?: number
   currentCapital?: number
   totalDeposits?: number

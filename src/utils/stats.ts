@@ -124,6 +124,7 @@ export function resolvePaperPrincipal(
   return n > 0 ? n : DEFAULT_PAPER_PRINCIPAL
 }
 
+/** 实盘账户盈亏：券商净资产 − 入金。没有净资产或入金时返回 null，由调用方决定是否回退。 */
 export function computeAccountReturn(
   startingCapital?: number | null,
   currentCapital?: number | null,

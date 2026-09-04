@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountType, PlaybookEntry, PaperAccountSettings } from '../types'
+import type { Trade, JournalEntry, AccountProfile, AccountInfo, AccountScope, AccountType, PlaybookEntry, PaperAccountSettings } from '../types'
 import { resolvePaperSettings } from '../types'
 import { playbookOutcomeFromPnl } from '../types'
-import { calculateTradePnl, resolveStartingCapital } from '../utils/stats'
+import { calculateTradePnl } from '../utils/stats'
+import { buildAccountInfo, sumAccountScope, toAccountScope } from '../utils/accountTotals'
 import { mergeTrades } from '../utils/storage'
 import {
   cloudIdSetsFrom,
@@ -234,6 +235,8 @@ interface TradeStoreContextValue {
   filteredJournal: JournalEntry[]
   selectedAccount: string
   selectedAccountInfo: AccountInfo | null
+  accountScope: AccountScope
+  allAccountsScope: AccountScope
   setSelectedAccount: (account: string) => void
   accountProfiles: AccountProfile[]
   accountInfos: AccountInfo[]
@@ -740,33 +743,34 @@ export function TradeStoreProvider({
   }, [trades, accountProfiles, accountOrder])
 
   const accountInfos = useMemo((): AccountInfo[] => {
-    return accounts.map((id) => {
-      const profile = accountProfiles.find((p) => p.id === id)
-      const accountTrades = trades.filter((t) => t.account === id)
-      const closed = accountTrades.filter((t) => t.status === 'closed')
-      const totalPnl = closed.reduce((sum, t) => sum + t.pnl, 0)
-      const startingCapital = resolveStartingCapital(
-        profile?.startingCapital ?? 0,
-        profile?.totalDeposits
-      )
-      return {
+    return accounts.map((id) =>
+      buildAccountInfo(
         id,
-        label: profile?.label ?? id,
-        type: profile?.type ?? inferAccountType(accountTrades),
-        isPaper: Boolean(profile?.isPaper),
-        tradeCount: accountTrades.length,
-        totalPnl,
-        startingCapital: startingCapital > 0 ? startingCapital : profile?.startingCapital,
-        currentCapital: profile?.currentCapital,
-        totalDeposits: profile?.totalDeposits,
-      }
-    })
+        trades,
+        accountProfiles.find((profile) => profile.id === id),
+        inferAccountType,
+      )
+    )
   }, [accounts, accountProfiles, trades])
 
   const selectedAccountInfo = useMemo(() => {
     if (selectedAccount === 'all') return null
     return accountInfos.find((a) => a.id === selectedAccount) ?? null
   }, [selectedAccount, accountInfos])
+
+  const allAccountsScope = useMemo(
+    () =>
+      sumAccountScope(
+        accountInfos.filter((account) => !account.isPaper),
+        { id: 'all', label: '全部账户', isAll: true, isPaper: false },
+      ),
+    [accountInfos]
+  )
+
+  const accountScope = useMemo((): AccountScope => {
+    if (selectedAccount === 'all' || !selectedAccountInfo) return allAccountsScope
+    return toAccountScope(selectedAccountInfo)
+  }, [selectedAccount, selectedAccountInfo, allAccountsScope])
 
   const addTrade = useCallback((input: Omit<Trade, 'id' | 'createdAt' | 'updatedAt' | 'pnl'> & { pnl?: number }) => {
     const now = new Date().toISOString()
@@ -1122,6 +1126,8 @@ export function TradeStoreProvider({
         filteredJournal,
         selectedAccount,
         selectedAccountInfo,
+        accountScope,
+        allAccountsScope,
         setSelectedAccount,
         accountProfiles,
         accountInfos,
