@@ -16,7 +16,7 @@ export function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <div className="flex min-h-screen bg-surface-50 dark:bg-surface-950">
+    <div className="flex h-dvh overflow-hidden bg-surface-50 dark:bg-surface-950">
       {/* Desktop sidebar */}
       <div className="hidden lg:flex">
         <Sidebar />
@@ -45,7 +45,7 @@ export function Layout() {
         </div>
       )}
 
-      <PullToRefresh className="flex min-w-0 flex-1 flex-col overflow-auto">
+      <PullToRefresh className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
         {/* Mobile top bar */}
         <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur-md pt-safe dark:border-surface-800 dark:bg-surface-950/95 lg:hidden">
           <button
