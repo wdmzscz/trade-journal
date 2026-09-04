@@ -143,7 +143,7 @@ function tradeToRow(trade: Trade, userId: string): TradeRow {
     setup: trade.setup ?? null,
     tags: trade.tags,
     notes: trade.notes ?? null,
-    entry_charts: trade.entryCharts ?? null,
+    entry_charts: trade.entryCharts ?? [],
     playbook_id: trade.playbookId ?? null,
     account: trade.account,
     created_at: trade.createdAt,
@@ -196,8 +196,8 @@ function playbookToRow(entry: PlaybookEntry, userId: string): PlaybookRow {
     thesis: entry.thesis ?? null,
     lessons: entry.lessons ?? null,
     journal_date: entry.journalDate ?? null,
-    charts: entry.charts,
-    tags: entry.tags,
+    charts: entry.charts ?? [],
+    tags: entry.tags ?? [],
     pinned: entry.pinned ?? false,
     created_at: entry.createdAt,
     updated_at: entry.updatedAt,
@@ -370,6 +370,14 @@ export async function deleteTradesByAccount(userId: string, accountId: string): 
   if (error) throw error
 }
 
+export async function upsertJournals(userId: string, entries: JournalEntry[]): Promise<void> {
+  if (entries.length === 0) return
+  const { error } = await getSupabase()
+    .from('journal_entries')
+    .upsert(entries.map((entry) => journalToRow(entry, userId)))
+  if (error) throw error
+}
+
 export async function upsertJournal(userId: string, entry: JournalEntry): Promise<void> {
   const { error } = await getSupabase().from('journal_entries').upsert(journalToRow(entry, userId))
   if (error) throw error
@@ -390,6 +398,14 @@ export async function deleteJournalByAccount(userId: string, accountId: string):
     .delete()
     .eq('user_id', userId)
     .eq('account', accountId)
+  if (error) throw error
+}
+
+export async function upsertProfiles(userId: string, profiles: AccountProfile[]): Promise<void> {
+  if (profiles.length === 0) return
+  const { error } = await getSupabase()
+    .from('account_profiles')
+    .upsert(profiles.map((profile) => profileToRow(profile, userId)))
   if (error) throw error
 }
 
@@ -414,6 +430,16 @@ export async function upsertPlaybookEntry(userId: string, entry: PlaybookEntry):
   if (error) throw error
 }
 
+export async function upsertPlaybookEntries(userId: string, entries: PlaybookEntry[]): Promise<void> {
+  if (entries.length === 0) return
+  const batchSize = 100
+  for (let i = 0; i < entries.length; i += batchSize) {
+    const batch = entries.slice(i, i + batchSize).map((entry) => playbookToRow(entry, userId))
+    const { error } = await getSupabase().from('playbook_entries').upsert(batch)
+    if (error) throw error
+  }
+}
+
 export async function deletePlaybookCloud(userId: string, id: string): Promise<void> {
   const { error } = await getSupabase()
     .from('playbook_entries')
@@ -421,6 +447,30 @@ export async function deletePlaybookCloud(userId: string, id: string): Promise<v
     .eq('user_id', userId)
     .eq('id', id)
   if (error) throw error
+}
+
+export async function deletePlaybookByAccount(userId: string, accountId: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from('playbook_entries')
+    .delete()
+    .eq('user_id', userId)
+    .eq('account', accountId)
+  if (error) throw error
+}
+
+export async function uploadChangedData(userId: string, data: CloudData): Promise<void> {
+  if (data.profiles.length > 0) {
+    await upsertProfiles(userId, data.profiles)
+  }
+  if (data.trades.length > 0) {
+    await upsertTrades(userId, data.trades)
+  }
+  if (data.journal.length > 0) {
+    await upsertJournals(userId, data.journal)
+  }
+  if (data.playbook.length > 0) {
+    await upsertPlaybookEntries(userId, data.playbook)
+  }
 }
 
 export function subscribeToChanges(

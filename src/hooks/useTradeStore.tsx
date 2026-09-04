@@ -5,12 +5,22 @@ import { resolvePaperSettings } from '../types'
 import { playbookOutcomeFromPnl } from '../types'
 import { calculateTradePnl, resolveStartingCapital } from '../utils/stats'
 import { mergeTrades } from '../utils/storage'
+import {
+  cloudIdSetsFrom,
+  countValidChartLinks,
+  hasRecordsToPush,
+  mergeAndDedupeCloudCollections,
+  overlayUnconfirmedLocal,
+  recordsToPush,
+  type CloudCollections,
+  type CloudIdSets,
+} from '../utils/cloudMerge'
 import { mergeIbkrFinancials, type IbkrAccountFinancials } from '../utils/ibkrImport'
 import { mergePlaybookChartSlots, normalizeChartLinks } from '../utils/chartLinks'
 import { isCloudEnabled } from '../lib/supabase'
 import {
   fetchAllData,
-  uploadAllData,
+  uploadChangedData,
   upsertTrade,
   deleteTradeCloud,
   upsertTrades,
@@ -22,6 +32,7 @@ import {
   deleteProfileCloud,
   upsertPlaybookEntry,
   deletePlaybookCloud,
+  deletePlaybookByAccount,
   subscribeToChanges,
 } from '../lib/cloudSync'
 
@@ -129,6 +140,14 @@ function loadProfiles(): AccountProfile[] {
 
 function loadSelectedAccount(userId?: string): string {
   return localStorage.getItem(accountKey(userId)) ?? 'all'
+}
+
+function persistJson(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch (err) {
+    console.warn('写入本地缓存失败', key, err)
+  }
 }
 
 function reconcileSelectedAccount(selected: string, trades: Trade[]): string {
@@ -275,40 +294,153 @@ export function TradeStoreProvider({
   const userIdRef = useRef(userId)
   userIdRef.current = userId
 
-  const [trades, setTrades] = useState<Trade[]>(() => (cloudEnabled ? [] : loadTrades()))
-  const [journal, setJournal] = useState<JournalEntry[]>(() => (cloudEnabled ? [] : loadJournal()))
-  const [accountProfiles, setAccountProfiles] = useState<AccountProfile[]>(() =>
-    cloudEnabled ? [] : loadProfiles()
-  )
+  const [trades, setTrades] = useState<Trade[]>(loadTrades)
+  const [journal, setJournal] = useState<JournalEntry[]>(loadJournal)
+  const [accountProfiles, setAccountProfiles] = useState<AccountProfile[]>(loadProfiles)
   const [selectedAccount, setSelectedAccountState] = useState<string>(() => loadSelectedAccount(userId))
   const [accountOrder, setAccountOrder] = useState<string[]>(() => loadAccountOrder(userId))
-  const [playbook, setPlaybook] = useState<PlaybookEntry[]>(() => (cloudEnabled ? [] : loadPlaybook()))
+  const [playbook, setPlaybook] = useState<PlaybookEntry[]>(loadPlaybook)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloudEnabled ? 'loading' : 'idle')
   const [cloudReady, setCloudReady] = useState(!cloudEnabled)
 
-  const applyData = useCallback((data: {
-    trades: Trade[]
-    journal: JournalEntry[]
-    profiles: AccountProfile[]
-    playbook: PlaybookEntry[]
-  }) => {
+  const tradesRef = useRef(trades)
+  const journalRef = useRef(journal)
+  const profilesRef = useRef(accountProfiles)
+  const playbookRef = useRef(playbook)
+  tradesRef.current = trades
+  journalRef.current = journal
+  profilesRef.current = accountProfiles
+  playbookRef.current = playbook
+
+  const previousCloudIdsRef = useRef<CloudIdSets | undefined>(undefined)
+  const lastAppliedCloudRef = useRef<CloudCollections | null>(null)
+  const sourceOfTruthReadyRef = useRef(false)
+  const reconcileQueuedRef = useRef(false)
+  const reconcileRunningRef = useRef(false)
+  const lastPushKeyRef = useRef('')
+  const pendingDeletesRef = useRef<CloudIdSets>({
+    trades: new Set(),
+    journal: new Set(),
+    profiles: new Set(),
+    playbook: new Set(),
+  })
+
+  const currentCollections = useCallback((): CloudCollections => ({
+    trades: tradesRef.current,
+    journal: journalRef.current,
+    profiles: profilesRef.current,
+    playbook: playbookRef.current,
+  }), [])
+
+  const applyData = useCallback((data: CloudCollections) => {
     setTrades(data.trades)
     setJournal(data.journal)
     setAccountProfiles(data.profiles)
     setPlaybook(data.playbook)
+    persistJson(TRADES_KEY, data.trades)
+    persistJson(JOURNAL_KEY, data.journal)
+    persistJson(PROFILES_KEY, data.profiles)
+    persistJson(PLAYBOOK_KEY, data.playbook)
     setSelectedAccountState((current) => reconcileSelectedAccount(current, data.trades))
   }, [])
 
+  const pushMissingToCloud = useCallback(async (
+    userId: string,
+    extras: ReturnType<typeof recordsToPush>,
+    droppedPlaybookIds: string[] = []
+  ) => {
+    if (!hasRecordsToPush(extras) && droppedPlaybookIds.length === 0) return
+    const pushKey = [
+      extras.playbook.map((item) => `${item.id}:${item.updatedAt}`).sort().join(','),
+      extras.trades.map((item) => `${item.id}:${item.updatedAt}:${countValidChartLinks(item.entryCharts)}`).sort().join(','),
+      extras.journal.map((item) => item.id).sort().join(','),
+      extras.profiles.map((item) => item.id).sort().join(','),
+      droppedPlaybookIds.slice().sort().join(','),
+    ].join('|')
+    if (pushKey === lastPushKeyRef.current) return
+    lastPushKeyRef.current = pushKey
+    setSyncStatus('syncing')
+    try {
+      if (hasRecordsToPush(extras)) {
+        await uploadChangedData(userId, extras)
+      }
+      for (const id of droppedPlaybookIds) {
+        await deletePlaybookCloud(userId, id)
+      }
+      setSyncStatus('idle')
+    } catch (err) {
+      lastPushKeyRef.current = ''
+      console.warn('本地案例/图表补传到云端失败', err)
+      setSyncStatus('error')
+      throw err
+    }
+  }, [])
+
+  const reconcileToDatabase = useCallback(async (options?: {
+    firstLoad?: boolean
+    signal?: AbortSignal
+    localOverride?: CloudCollections
+  }) => {
+    const userId = userIdRef.current
+    if (!userId) return
+
+    const local = options?.localOverride ?? currentCollections()
+    const cloud = options?.signal
+      ? await withTimeout(fetchAllData(userId, options.signal), CLOUD_SYNC_TIMEOUT_MS, '云端同步超时')
+      : await fetchAllData(userId)
+
+    const recovered = !sourceOfTruthReadyRef.current || options?.firstLoad
+      ? mergeAndDedupeCloudCollections(local, cloud)
+      : overlayUnconfirmedLocal(cloud, local, lastAppliedCloudRef.current ?? cloud, pendingDeletesRef.current)
+
+    recovered.droppedPlaybookIds.forEach((id) => pendingDeletesRef.current.playbook.add(id))
+    const extras = recordsToPush(recovered.merged, cloud)
+    if (hasRecordsToPush(extras) || recovered.droppedPlaybookIds.length > 0) {
+      await pushMissingToCloud(userId, extras, recovered.droppedPlaybookIds)
+    }
+
+    const authoritative = options?.signal
+      ? await withTimeout(fetchAllData(userId, options.signal), CLOUD_SYNC_TIMEOUT_MS, '云端同步超时')
+      : await fetchAllData(userId)
+
+    const stillLocal = currentCollections()
+    const lastApplied = lastAppliedCloudRef.current ?? recovered.merged
+    const overlaid = overlayUnconfirmedLocal(
+      authoritative,
+      stillLocal,
+      lastApplied,
+      pendingDeletesRef.current
+    )
+    if (overlaid.droppedPlaybookIds.length > 0) {
+      overlaid.droppedPlaybookIds.forEach((id) => pendingDeletesRef.current.playbook.add(id))
+      await pushMissingToCloud(userId, { trades: [], journal: [], profiles: [], playbook: [] }, overlaid.droppedPlaybookIds)
+    }
+
+    applyData(overlaid.merged)
+    lastAppliedCloudRef.current = authoritative
+    previousCloudIdsRef.current = cloudIdSetsFrom(authoritative)
+    sourceOfTruthReadyRef.current = true
+    setSyncStatus('idle')
+  }, [applyData, currentCollections, pushMissingToCloud])
+
   const refetchFromCloud = useCallback(async () => {
     if (!userIdRef.current) return
+    if (reconcileRunningRef.current) {
+      reconcileQueuedRef.current = true
+      return
+    }
+    reconcileRunningRef.current = true
     try {
-      const data = await fetchAllData(userIdRef.current)
-      applyData(data)
-      setSyncStatus('idle')
+      do {
+        reconcileQueuedRef.current = false
+        await reconcileToDatabase()
+      } while (reconcileQueuedRef.current)
     } catch {
       setSyncStatus('error')
+    } finally {
+      reconcileRunningRef.current = false
     }
-  }, [applyData])
+  }, [reconcileToDatabase])
 
   useEffect(() => {
     if (!cloudEnabled || !userId) return
@@ -318,6 +450,12 @@ export function TradeStoreProvider({
 
     async function init() {
       setSyncStatus('loading')
+      const local = {
+        trades: loadTrades(),
+        journal: loadJournal(),
+        profiles: loadProfiles(),
+        playbook: loadPlaybook(),
+      }
       try {
         // 等 auth lock 释放后再打 PostgREST，避免首次打开永久挂起
         await new Promise<void>((resolve) => {
@@ -325,68 +463,17 @@ export function TradeStoreProvider({
         })
         if (cancelled) return
 
-        let data = await withTimeout(
-          fetchAllData(userId!, controller.signal),
-          CLOUD_SYNC_TIMEOUT_MS,
-          '云端同步超时'
-        )
-
-        const cloudEmpty =
-          data.trades.length === 0 &&
-          data.journal.length === 0 &&
-          data.profiles.length === 0 &&
-          data.playbook.length === 0
-
-        if (cloudEmpty) {
-          const localTrades = loadTrades()
-          const localJournal = loadJournal()
-          const localProfiles = loadProfiles()
-          const localPlaybook = loadPlaybook()
-          if (
-            localTrades.length > 0 ||
-            localJournal.length > 0 ||
-            localProfiles.length > 0 ||
-            localPlaybook.length > 0
-          ) {
-            data = {
-              trades: localTrades,
-              journal: localJournal,
-              profiles: localProfiles,
-              playbook: localPlaybook,
-            }
-            if (!cancelled) {
-              applyData(data)
-              setSyncStatus('syncing')
-              setCloudReady(true)
-            }
-            void uploadAllData(userId!, data)
-              .then(() => {
-                if (!cancelled) setSyncStatus('idle')
-              })
-              .catch((err) => {
-                console.warn('本地数据上传云端失败', err)
-                if (!cancelled) setSyncStatus('error')
-              })
-            return
-          }
-        }
-
-        if (!cancelled) {
-          applyData(data)
-          setSyncStatus('idle')
-          setCloudReady(true)
-        }
+        reconcileRunningRef.current = true
+        await reconcileToDatabase({ firstLoad: true, signal: controller.signal, localOverride: local })
+        if (!cancelled) setCloudReady(true)
       } catch (err) {
         if (cancelled) return
         console.warn('云端同步失败，改用本地缓存', err)
-        applyData({
-          trades: loadTrades(),
-          journal: loadJournal(),
-          profiles: loadProfiles(),
-          playbook: loadPlaybook(),
-        })
+        applyData(local)
         setSyncStatus('error')
         setCloudReady(true)
+      } finally {
+        reconcileRunningRef.current = false
       }
     }
 
@@ -395,7 +482,7 @@ export function TradeStoreProvider({
       cancelled = true
       controller.abort()
     }
-  }, [applyData, cloudEnabled, userId])
+  }, [applyData, cloudEnabled, reconcileToDatabase, userId])
 
   useEffect(() => {
     if (!cloudEnabled || !userId || !cloudReady) return
@@ -411,30 +498,33 @@ export function TradeStoreProvider({
 
   useEffect(() => {
     if (!cloudReady) return
-    localStorage.setItem(TRADES_KEY, JSON.stringify(trades))
+    persistJson(TRADES_KEY, trades)
   }, [trades, cloudReady])
 
   useEffect(() => {
     if (!cloudReady) return
-    localStorage.setItem(JOURNAL_KEY, JSON.stringify(journal))
+    persistJson(JOURNAL_KEY, journal)
   }, [journal, cloudReady])
 
   useEffect(() => {
     if (!cloudReady) return
-    localStorage.setItem(PROFILES_KEY, JSON.stringify(accountProfiles))
+    persistJson(PROFILES_KEY, accountProfiles)
   }, [accountProfiles, cloudReady])
 
   useEffect(() => {
-    localStorage.setItem(accountKey(userId), selectedAccount)
+    try {
+      localStorage.setItem(accountKey(userId), selectedAccount)
+    } catch {
+      /* ignore */
+    }
   }, [selectedAccount, userId])
 
   useEffect(() => {
-    if (!cloudReady) return
-    localStorage.setItem(PLAYBOOK_KEY, JSON.stringify(playbook))
-  }, [playbook, cloudReady])
+    persistJson(PLAYBOOK_KEY, playbook)
+  }, [playbook])
 
   useEffect(() => {
-    localStorage.setItem(accountOrderKey(userId), JSON.stringify(accountOrder))
+    persistJson(accountOrderKey(userId), accountOrder)
   }, [accountOrder, userId])
 
   const cloudWrite = useCallback(async (fn: () => Promise<void>) => {
@@ -443,7 +533,8 @@ export function TradeStoreProvider({
     try {
       await fn()
       setSyncStatus('idle')
-    } catch {
+    } catch (err) {
+      console.warn('云端写入失败', err)
       setSyncStatus('error')
     }
   }, [cloudEnabled])
@@ -570,10 +661,21 @@ export function TradeStoreProvider({
   }, [cloudEnabled, cloudWrite, trades])
 
   const deleteAccount = useCallback((id: string) => {
+    pendingDeletesRef.current.profiles.add(id)
     setAccountProfiles((prev) => prev.filter((p) => p.id !== id))
     setAccountOrder((prev) => prev.filter((accountId) => accountId !== id))
-    setTrades((prev) => prev.filter((t) => t.account !== id))
-    setJournal((prev) => prev.filter((j) => j.account !== id))
+    setTrades((prev) => {
+      prev.filter((t) => t.account === id).forEach((t) => pendingDeletesRef.current.trades.add(t.id))
+      return prev.filter((t) => t.account !== id)
+    })
+    setJournal((prev) => {
+      prev.filter((j) => j.account === id).forEach((j) => pendingDeletesRef.current.journal.add(j.id))
+      return prev.filter((j) => j.account !== id)
+    })
+    setPlaybook((prev) => {
+      prev.filter((p) => p.account === id).forEach((p) => pendingDeletesRef.current.playbook.add(p.id))
+      return prev.filter((p) => p.account !== id)
+    })
     setSelectedAccountState((current) => (current === id ? 'all' : current))
 
     if (cloudEnabled && userIdRef.current) {
@@ -582,6 +684,7 @@ export function TradeStoreProvider({
         await deleteProfileCloud(uid, id)
         await deleteTradesByAccount(uid, id)
         await deleteJournalByAccount(uid, id)
+        await deletePlaybookByAccount(uid, id)
       })
     }
   }, [cloudEnabled, cloudWrite])
@@ -707,6 +810,7 @@ export function TradeStoreProvider({
   }, [cloudEnabled, cloudWrite])
 
   const deleteTrade = useCallback((id: string) => {
+    pendingDeletesRef.current.trades.add(id)
     setTrades((prev) => prev.filter((t) => t.id !== id))
 
     if (cloudEnabled && userIdRef.current) {
@@ -827,6 +931,7 @@ export function TradeStoreProvider({
   }, [cloudEnabled, cloudWrite])
 
   const deleteJournal = useCallback((id: string) => {
+    pendingDeletesRef.current.journal.add(id)
     setJournal((prev) => prev.filter((j) => j.id !== id))
 
     if (cloudEnabled && userIdRef.current) {
@@ -851,40 +956,56 @@ export function TradeStoreProvider({
 
   const savePlaybookEntry = useCallback((input: Omit<PlaybookEntry, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     const now = new Date().toISOString()
-    let savedEntry: PlaybookEntry | null = null
+    const existing = input.id ? playbookRef.current.find((p) => p.id === input.id) : undefined
+    const entry: PlaybookEntry = {
+      ...input,
+      id: existing?.id ?? uuidv4(),
+      charts: normalizeChartLinks(input.charts),
+      outcome: input.outcome ?? existing?.outcome ?? playbookOutcomeFromPnl(input.pnl),
+      pinned: input.pinned ?? existing?.pinned ?? false,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    }
+    pendingDeletesRef.current.playbook.delete(entry.id)
 
     setPlaybook((prev) => {
-      const existing = input.id ? prev.find((p) => p.id === input.id) : undefined
-      const entry: PlaybookEntry = {
-        ...input,
-        id: existing?.id ?? uuidv4(),
-        charts: normalizeChartLinks(input.charts),
-        outcome: input.outcome ?? existing?.outcome ?? playbookOutcomeFromPnl(input.pnl),
-        pinned: input.pinned ?? existing?.pinned ?? false,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      }
-      savedEntry = entry
-
-      if (entry.tradeId) {
-        setTrades((trades) =>
-          trades.map((t) => (t.id === entry.tradeId ? { ...t, playbookId: entry.id, updatedAt: now } : t))
-        )
-      }
-
-      if (existing) {
-        return prev.map((p) => (p.id === existing.id ? entry : p))
-      }
-      return [entry, ...prev]
+      const next = prev.some((p) => p.id === entry.id)
+        ? prev.map((p) => (p.id === entry.id ? entry : p))
+        : [entry, ...prev]
+      persistJson(PLAYBOOK_KEY, next)
+      return next
     })
 
-    if (cloudEnabled && userIdRef.current && savedEntry) {
-      const entry = savedEntry
-      cloudWrite(() => upsertPlaybookEntry(userIdRef.current!, entry))
+    let linkedTrade: Trade | null = null
+    if (entry.tradeId) {
+      const tradeId = entry.tradeId
+      setTrades((current) => {
+        const next = current.map((t) => {
+          if (t.id !== tradeId) return t
+          linkedTrade = {
+            ...t,
+            playbookId: entry.id,
+            entryCharts: entry.charts.length > 0 ? entry.charts : t.entryCharts,
+            updatedAt: now,
+          }
+          return linkedTrade
+        })
+        persistJson(TRADES_KEY, next)
+        return next
+      })
+    }
+
+    if (cloudEnabled && userIdRef.current) {
+      const trade = linkedTrade
+      cloudWrite(async () => {
+        await upsertPlaybookEntry(userIdRef.current!, entry)
+        if (trade) await upsertTrade(userIdRef.current!, trade)
+      })
     }
   }, [cloudEnabled, cloudWrite])
 
   const deletePlaybookEntry = useCallback((id: string) => {
+    pendingDeletesRef.current.playbook.add(id)
     setPlaybook((prev) => prev.filter((p) => p.id !== id))
     setTrades((prev) =>
       prev.map((t) => (t.playbookId === id ? { ...t, playbookId: undefined, updatedAt: new Date().toISOString() } : t))
@@ -922,12 +1043,14 @@ export function TradeStoreProvider({
 
     const now = new Date().toISOString()
     const entryCharts = normalizeChartLinks(trade.entryCharts)
-    const charts = entryCharts.length > 0
-      ? mergePlaybookChartSlots([
-          { timeframe: 'E', url: entryCharts[0]?.url ?? '', note: entryCharts[0]?.note },
-          ...entryCharts.slice(1),
-        ])
-      : mergePlaybookChartSlots()
+    const charts = normalizeChartLinks(
+      entryCharts.length > 0
+        ? mergePlaybookChartSlots([
+            { timeframe: 'E', url: entryCharts[0]?.url ?? '', note: entryCharts[0]?.note },
+            ...entryCharts.slice(1),
+          ])
+        : []
+    )
 
     const outcome = playbookOutcomeFromPnl(trade.pnl) ?? 'breakeven'
     const caseLabel = outcome === 'win' ? '盈利案例' : outcome === 'loss' ? '亏损案例' : '持平案例'
@@ -955,13 +1078,26 @@ export function TradeStoreProvider({
       updatedAt: now,
     }
 
-    setPlaybook((prev) => [entry, ...prev])
+    setPlaybook((prev) => {
+      const next = [entry, ...prev]
+      persistJson(PLAYBOOK_KEY, next)
+      return next
+    })
+    let linkedTrade: Trade | null = null
     setTrades((prev) =>
-      prev.map((t) => (t.id === tradeId ? { ...t, playbookId: entry.id, updatedAt: now } : t))
+      prev.map((t) => {
+        if (t.id !== tradeId) return t
+        linkedTrade = { ...t, playbookId: entry.id, updatedAt: now }
+        return linkedTrade
+      })
     )
 
     if (cloudEnabled && userIdRef.current) {
-      cloudWrite(() => upsertPlaybookEntry(userIdRef.current!, entry))
+      const trade = linkedTrade
+      cloudWrite(async () => {
+        await upsertPlaybookEntry(userIdRef.current!, entry)
+        if (trade) await upsertTrade(userIdRef.current!, trade)
+      })
     }
     return entry.id
   }, [trades, playbook, cloudEnabled, cloudWrite])

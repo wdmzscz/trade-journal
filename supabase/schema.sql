@@ -92,6 +92,7 @@ create policy "Users manage own journal_entries"
 alter publication supabase_realtime add table trades;
 alter publication supabase_realtime add table journal_entries;
 alter publication supabase_realtime add table account_profiles;
+alter publication supabase_realtime add table playbook_entries;
 
 -- 已有数据库升级（若之前已运行过旧版 schema，在 SQL Editor 执行以下语句）
 alter table account_profiles add column if not exists starting_capital numeric;
