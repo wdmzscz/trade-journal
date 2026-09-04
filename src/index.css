@@ -35,6 +35,14 @@
   .scrollbar-thin {
     scrollbar-width: thin;
   }
+
+  .overscroll-x-contain {
+    overscroll-behavior-x: contain;
+  }
+
+  .overscroll-y-contain {
+    overscroll-behavior-y: contain;
+  }
 }
 
 @layer components {
