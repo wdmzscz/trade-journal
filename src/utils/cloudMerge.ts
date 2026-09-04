@@ -140,15 +140,17 @@ export function mergeProfileRecord(local?: AccountProfile, cloud?: AccountProfil
   if (!local) return cloud!
   if (!cloud) return local
   return {
-    ...cloud,
     ...local,
-    paperSettings: local.paperSettings ?? cloud.paperSettings,
-    startingCapital: local.startingCapital ?? cloud.startingCapital,
-    currentCapital: local.currentCapital ?? cloud.currentCapital,
-    totalDeposits: local.totalDeposits ?? cloud.totalDeposits,
-    totalWithdrawals: local.totalWithdrawals ?? cloud.totalWithdrawals,
-    cashFlows: local.cashFlows ?? cloud.cashFlows,
-    navHistory: local.navHistory ?? cloud.navHistory,
+    ...cloud,
+    paperSettings: cloud.paperSettings ?? local.paperSettings,
+    startingCapital: cloud.startingCapital ?? local.startingCapital,
+    currentCapital: cloud.currentCapital ?? local.currentCapital,
+    totalDeposits: cloud.totalDeposits ?? local.totalDeposits,
+    totalWithdrawals: cloud.totalWithdrawals ?? local.totalWithdrawals,
+    cashFlows: cloud.cashFlows ?? local.cashFlows,
+    navHistory: cloud.navHistory ?? local.navHistory,
+    isPaper: cloud.isPaper ?? local.isPaper,
+    label: cloud.label || local.label,
   }
 }
 
@@ -329,8 +331,10 @@ export function overlayUnconfirmedLocal(
     appliedItems: T[],
     pendingDeleteIds: Set<string> | undefined,
     mergeItem: (localItem: T | undefined, cloudItem: T | undefined) => T,
-    richer?: (localItem: T, cloudItem: T) => boolean
+    richer?: (localItem: T, cloudItem: T) => boolean,
+    options?: { allowUntimestampedEdits?: boolean }
   ): T[] => {
+    const allowUntimestampedEdits = options?.allowUntimestampedEdits !== false
     const cloudMap = new Map(cloudItems.map((item) => [item.id, item]))
     const appliedMap = new Map(appliedItems.map((item) => [item.id, item]))
     const result = new Map(cloudItems.map((item) => [item.id, item]))
@@ -344,6 +348,7 @@ export function overlayUnconfirmedLocal(
       const newerThanApplied = Boolean(applied && ts(localItem.updatedAt) > ts(applied.updatedAt))
       const hasRicherData = Boolean(cloudItem && richer?.(localItem, cloudItem))
       const editedWithoutTimestamp = Boolean(
+        allowUntimestampedEdits &&
         applied &&
         !localItem.updatedAt &&
         JSON.stringify(localItem) !== JSON.stringify(applied)
@@ -403,7 +408,9 @@ export function overlayUnconfirmedLocal(
         local.profiles,
         lastApplied.profiles,
         pendingDeletes?.profiles,
-        mergeProfileRecord
+        mergeProfileRecord,
+        undefined,
+        { allowUntimestampedEdits: false }
       ),
       playbook: deduped.entries,
     },
