@@ -607,7 +607,11 @@ export function PlaybookPage() {
               onEdit={() => openEdit(entry)}
               onTogglePin={() => togglePlaybookPinned(entry.id)}
               onDelete={() => {
-                if (confirm(`确定删除「${entry.title}」？`)) deletePlaybookEntry(entry.id)
+                const isPaper = Boolean(accountProfiles.find((profile) => profile.id === entry.account)?.isPaper)
+                const message = isPaper
+                  ? `确定删除「${entry.title}」？关联交易也会一起删除。`
+                  : `确定删除「${entry.title}」？`
+                if (confirm(message)) deletePlaybookEntry(entry.id)
               }}
             />
           ))}

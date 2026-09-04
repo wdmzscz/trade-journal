@@ -295,22 +295,31 @@ function needsPush<T extends { id: string; updatedAt?: string }>(
 /** 合并后需要补传到云端的记录（本地独有、更新、或图表更完整） */
 export function recordsToPush(
   merged: CloudCollections,
-  cloud: CloudCollections
+  cloud: CloudCollections,
+  seenCloudIds?: CloudIdSets
 ): CloudCollections {
   const cloudTrades = new Map(cloud.trades.map((item) => [item.id, item]))
   const cloudJournal = new Map(cloud.journal.map((item) => [item.id, item]))
   const cloudProfiles = new Map(cloud.profiles.map((item) => [item.id, item]))
   const cloudPlaybook = new Map(cloud.playbook.map((item) => [item.id, item]))
 
+  const notResurrected = <T extends { id: string }>(item: T, cloudHas: boolean, seen?: Set<string>) =>
+    cloudHas || !seen?.has(item.id)
+
   return {
     trades: merged.trades.filter((item) =>
+      notResurrected(item, cloudTrades.has(item.id), seenCloudIds?.trades) &&
       needsPush(item, cloudTrades.get(item.id), (mergedItem, cloudItem) =>
         countValidChartLinks(mergedItem.entryCharts) > countValidChartLinks(cloudItem.entryCharts)
       )
     ),
-    journal: merged.journal.filter((item) => needsPush(item, cloudJournal.get(item.id), () => false)),
+    journal: merged.journal.filter((item) =>
+      notResurrected(item, cloudJournal.has(item.id), seenCloudIds?.journal) &&
+      needsPush(item, cloudJournal.get(item.id), () => false)
+    ),
     profiles: merged.profiles.filter((item) => !cloudProfiles.has(item.id)),
     playbook: merged.playbook.filter((item) =>
+      notResurrected(item, cloudPlaybook.has(item.id), seenCloudIds?.playbook) &&
       needsPush(item, cloudPlaybook.get(item.id), (mergedItem, cloudItem) =>
         countValidChartLinks(mergedItem.charts) > countValidChartLinks(cloudItem.charts)
       )
