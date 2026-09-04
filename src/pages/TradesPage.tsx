@@ -175,7 +175,7 @@ export function TradesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <button
-                        onClick={() => { if (confirm('确定删除这笔交易？')) deleteTrade(trade.id) }}
+                        onClick={() => { if (confirm('确定删除这笔交易？关联的 Playbook 案例和截图也会一起删除。')) deleteTrade(trade.id) }}
                         className="rounded p-1 text-slate-400 hover:bg-red-50 dark:bg-red-950/40 hover:text-red-500 dark:text-red-400"
                       >
                         <Trash2 className="h-4 w-4" />
