@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { FlaskConical } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { resolvePaperSettings, type PaperAccountSettings } from '../types'
-import { formatCurrency, formatPercent, resolvePrincipalCapital } from '../utils/stats'
+import { formatCurrency, formatPercent } from '../utils/stats'
 import { cn } from '../utils/cn'
 
 function parseNum(raw: string, fallback: number): number {
@@ -30,9 +30,9 @@ export function PaperAccountConfigPanel({ className }: { className?: string }) {
 
   const isPaper = Boolean(profile?.isPaper || selectedAccountInfo?.isPaper)
   const settings = resolvePaperSettings(profile?.paperSettings)
-  const balance = resolvePrincipalCapital(profile?.startingCapital ?? 0, profile?.totalDeposits)
+  const balance = selectedAccountInfo?.principalCapital ?? 0
   const totalPnl = selectedAccountInfo?.totalPnl ?? 0
-  const equity = balance + totalPnl
+  const equity = selectedAccountInfo?.currentCapital ?? 0
   const roi = balance > 0 ? (totalPnl / balance) * 100 : 0
   const riskDollars = balance * (settings.riskPercent / 100)
 
@@ -45,13 +45,13 @@ export function PaperAccountConfigPanel({ className }: { className?: string }) {
   useEffect(() => {
     if (!profile?.isPaper) return
     const next = resolvePaperSettings(profile.paperSettings)
-    const nextBalance = resolvePrincipalCapital(profile.startingCapital ?? 0, profile.totalDeposits)
+    const nextBalance = selectedAccountInfo?.principalCapital ?? 0
     setBalanceStr(formatInputMoney(nextBalance > 0 ? nextBalance : 50000))
     setRiskStr(String(next.riskPercent))
     setBeMinStr(String(next.beMinR))
     setBeMaxStr(String(next.beMaxR))
     setCostStr(String(next.costPerTradeR))
-  }, [profile?.id, profile?.isPaper, profile?.startingCapital, profile?.totalDeposits, profile?.paperSettings])
+  }, [profile?.id, profile?.isPaper, profile?.paperSettings, selectedAccountInfo?.principalCapital])
 
   if (!isPaper || !profile || selectedAccount === 'all') return null
 

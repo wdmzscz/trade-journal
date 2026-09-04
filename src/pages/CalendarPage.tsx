@@ -24,7 +24,6 @@ import {
   dayResultColor,
   formatCurrency,
   formatPercent,
-  resolvePrincipalCapital,
 } from '../utils/stats'
 import type { DayResult } from '../types'
 
@@ -32,7 +31,7 @@ const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const MONTHS = Array.from({ length: 12 }, (_, i) => i)
 
 export function CalendarPage() {
-  const { filteredTrades, filteredJournal, accountProfiles, selectedAccount } = useTradeStore()
+  const { filteredTrades, filteredJournal, accountProfiles, selectedAccount, accountScope } = useTradeStore()
   const { resolvedTheme } = useTheme()
   const chartGrid = resolvedTheme === 'dark' ? '#334155' : '#e2e8f0'
   const chartTick = resolvedTheme === 'dark' ? '#94a3b8' : '#64748b'
@@ -65,28 +64,21 @@ export function CalendarPage() {
 
   const capitalContext = useMemo(() => {
     const liveProfiles = accountProfiles.filter((p) => !p.isPaper)
-    if (selectedAccount === 'all') {
-      return {
-        startingCapital: liveProfiles.reduce(
-          (sum, profile) =>
-            sum + resolvePrincipalCapital(profile.startingCapital ?? 0, profile.totalDeposits),
-          0
-        ),
-        currentCapital: liveProfiles.reduce((s, p) => s + (p.currentCapital ?? 0), 0),
-        totalDeposits: liveProfiles.reduce((s, p) => s + (p.totalDeposits ?? 0), 0),
-        cashFlows: liveProfiles.flatMap((p) => p.cashFlows ?? []),
-        navHistory: liveProfiles.flatMap((p) => p.navHistory ?? []),
-      }
-    }
-    const profile = accountProfiles.find((p) => p.id === selectedAccount)
+    const profile = selectedAccount === 'all'
+      ? null
+      : accountProfiles.find((p) => p.id === selectedAccount)
     return {
-      startingCapital: resolvePrincipalCapital(profile?.startingCapital ?? 0, profile?.totalDeposits),
-      currentCapital: profile?.currentCapital,
-      totalDeposits: profile?.totalDeposits,
-      cashFlows: profile?.cashFlows ?? [],
-      navHistory: profile?.navHistory ?? [],
+      startingCapital: accountScope.principalCapital,
+      currentCapital: accountScope.currentCapital,
+      totalDeposits: accountScope.principalCapital || accountScope.totalDeposits,
+      cashFlows: selectedAccount === 'all'
+        ? liveProfiles.flatMap((p) => p.cashFlows ?? [])
+        : profile?.cashFlows ?? [],
+      navHistory: selectedAccount === 'all'
+        ? liveProfiles.flatMap((p) => p.navHistory ?? [])
+        : profile?.navHistory ?? [],
     }
-  }, [selectedAccount, accountProfiles])
+  }, [selectedAccount, accountProfiles, accountScope])
 
   const dailyEquityMap = useMemo(
     () =>

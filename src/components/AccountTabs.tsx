@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { useTradeStore } from '../hooks/useTradeStore'
 import { cn } from '../utils/cn'
-import { formatCurrency, computeAccountReturn } from '../utils/stats'
+import { formatCurrency } from '../utils/stats'
 import type { AccountInfo, AccountType } from '../types'
 
 const TYPE_META: Record<AccountType, { icon: typeof TrendingUp; badge: string; color: string }> = {
@@ -35,7 +35,7 @@ type ModalMode = 'add' | 'edit' | 'manage' | null
 
 export function AccountTabs() {
   const {
-    selectedAccount, setSelectedAccount, accountInfos,
+    selectedAccount, setSelectedAccount, accountInfos, allAccountsScope,
     registerAccount, updateAccount, deleteAccount, setAccountsOrder, journal,
   } = useTradeStore()
 
@@ -53,10 +53,6 @@ export function AccountTabs() {
   const [formStartingCapital, setFormStartingCapital] = useState('')
   const [formCurrentCapital, setFormCurrentCapital] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
-
-  const liveAccounts = accountInfos.filter((a) => !a.isPaper)
-  const allPnl = liveAccounts.reduce((sum, a) => sum + a.totalPnl, 0)
-  const allTrades = liveAccounts.reduce((sum, a) => sum + a.tradeCount, 0)
 
   const openAdd = () => {
     setEditingAccount(null)
@@ -179,7 +175,7 @@ export function AccountTabs() {
               onClick={() => setSelectedAccount('all')}
               icon={LayoutGrid}
               title="全部账户"
-              subtitle={`${allTrades} 笔 · ${formatCurrency(allPnl)}`}
+              subtitle={`${allAccountsScope.tradeCount} 笔 · ${formatCurrency(allAccountsScope.totalPnl)}`}
               badge="汇总"
               badgeColor="text-brand-600 dark:text-brand-400"
             />
@@ -205,8 +201,8 @@ export function AccountTabs() {
                     badgeColor={badgeColor}
                     trailing={
                       account.tradeCount > 0 ? (
-                        <span className={cn('text-[10px] font-semibold', (computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400')}>
-                          {formatCurrency(computeAccountReturn(account.startingCapital, account.currentCapital, account.totalDeposits) ?? account.totalPnl)}
+                        <span className={cn('text-[10px] font-semibold', account.totalPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400')}>
+                          {formatCurrency(account.totalPnl)}
                         </span>
                       ) : (
                         <span className="text-[10px] text-slate-400">无数据</span>
